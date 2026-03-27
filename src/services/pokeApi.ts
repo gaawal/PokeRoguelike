@@ -10,21 +10,43 @@ export async function getRandomPokemonId(selectedGens: number[] = [1]): Promise<
   return Math.floor(Math.random() * (end - start + 1)) + start;
 }
 
+function getZhName(names: any[]): string | undefined {
+  const zhHans = names.find((n: any) => n.language.name === 'zh-hans')?.name;
+  if (zhHans) return zhHans;
+  const zhHant = names.find((n: any) => n.language.name === 'zh-hant')?.name;
+  return zhHant;
+}
+
+function getZhDescription(entries: any[]): string | undefined {
+  // Filter for Chinese entries
+  const zhEntries = entries.filter((e: any) => e.language.name === 'zh-hans' || e.language.name === 'zh-hant');
+  if (zhEntries.length === 0) return undefined;
+  
+  // Prefer zh-hans
+  const zhHans = zhEntries.find((e: any) => e.language.name === 'zh-hans')?.flavor_text;
+  if (zhHans) return zhHans;
+  
+  // Fallback to zh-hant
+  return zhEntries[zhEntries.length - 1].flavor_text;
+}
+
 export async function fetchPokemon(id: number): Promise<Pokemon> {
   const response = await fetch(`${BASE_URL}/pokemon/${id}`);
   if (!response.ok) throw new Error('Failed to fetch pokemon');
   const data = await response.json();
   
-  // Fetch Chinese name
+  // Fetch Chinese name from species
   try {
     const speciesRes = await fetch(data.species.url);
     const speciesData = await speciesRes.json();
-    const zhName = speciesData.names.find((n: any) => n.language.name === 'zh-Hans')?.name;
+    data.names = speciesData.names;
+    const zhName = getZhName(speciesData.names);
     data.zhName = zhName || data.name;
     
     // Fetch ability names
     for (const a of data.abilities) {
-      a.ability.zhName = await fetchAbility(a.ability.url);
+      a.ability.names = await fetchAbilityNames(a.ability.url);
+      a.ability.zhName = getZhName(a.ability.names);
     }
   } catch (e) {
     data.zhName = data.name;
@@ -33,12 +55,23 @@ export async function fetchPokemon(id: number): Promise<Pokemon> {
   return data;
 }
 
+export async function fetchAbilityNames(url: string): Promise<any[]> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.names;
+  } catch (e) {
+    return [];
+  }
+}
+
 export async function fetchAbility(url: string): Promise<string> {
   try {
     const response = await fetch(url);
     if (!response.ok) return '';
     const data = await response.json();
-    const zhName = data.names.find((n: any) => n.language.name === 'zh-Hans')?.name;
+    const zhName = getZhName(data.names);
     return zhName || data.name;
   } catch (e) {
     return '';
@@ -50,11 +83,22 @@ export async function fetchMove(url: string): Promise<Move> {
   if (!response.ok) throw new Error('Failed to fetch move');
   const data = await response.json();
   
-  const zhName = data.names.find((n: any) => n.language.name === 'zh-Hans')?.name;
-  const zhDescription = data.flavor_text_entries.find((e: any) => e.language.name === 'zh-Hans')?.flavor_text;
+  const zhName = getZhName(data.names);
+  const zhDescription = getZhDescription(data.flavor_text_entries);
   
+  const statChanges = data.stat_changes?.map((sc: any) => {
+    let statName = sc.stat.name;
+    if (statName === 'special-attack') statName = 'spAtk';
+    if (statName === 'special-defense') statName = 'spDef';
+    return {
+      change: sc.change,
+      stat: statName
+    };
+  });
+
   return {
     name: data.name,
+    names: data.names,
     zhName: zhName || data.name,
     power: data.power,
     accuracy: data.accuracy,
@@ -62,6 +106,15 @@ export async function fetchMove(url: string): Promise<Move> {
     damage_class: data.damage_class.name,
     pp: data.pp,
     zhDescription: zhDescription || '暂无描述',
+    flavor_text_entries: data.flavor_text_entries,
+    ailment: data.meta?.ailment?.name !== 'none' ? data.meta?.ailment?.name : undefined,
+    ailmentChance: data.meta?.ailment_chance || 0,
+    flinchChance: data.meta?.flinch_chance || 0,
+    statChanges: statChanges?.length > 0 ? statChanges : undefined,
+    drain: data.meta?.drain || 0,
+    healing: data.meta?.healing || 0,
+    critRate: data.meta?.crit_rate || 0,
+    target: data.target?.name,
   };
 }
 
@@ -75,10 +128,8 @@ export async function getLearnableMoves(pokemon: any, currentMoves: Move[], coun
   for (const m of shuffled) {
     try {
       const move = await fetchMove(m.move.url);
-      if (move.power !== null) {
-        selected.push(move);
-        if (selected.length >= count) break;
-      }
+      selected.push(move);
+      if (selected.length >= count) break;
     } catch (e) {
       continue;
     }
@@ -104,10 +155,8 @@ export async function getProcessedPokemon(id: number, level: number = 50): Promi
   for (const m of shuffledMoves) {
     try {
       const move = await fetchMove(m.move.url);
-      if (move.power !== null) {
-        validMoves.push(move);
-        if (validMoves.length >= 4) break;
-      }
+      validMoves.push(move);
+      if (validMoves.length >= 4) break;
     } catch (e) {
       continue;
     }
@@ -175,5 +224,14 @@ export async function getProcessedPokemon(id: number, level: number = 50): Promi
     ivs,
     baseStats,
     calculatedStats,
+    statStages: {
+      attack: 0,
+      defense: 0,
+      spAtk: 0,
+      spDef: 0,
+      speed: 0,
+      accuracy: 0,
+      evasion: 0,
+    }
   };
 }

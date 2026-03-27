@@ -34,7 +34,7 @@ import {
   Circle
 } from 'lucide-react';
 import { getProcessedPokemon, getRandomPokemonId, getLearnableMoves } from './services/pokeApi';
-import { GamePokemon, GameState, Item, Move, BattleMenuTab } from './types';
+import { GamePokemon, GameState, Item, Move, BattleMenuTab, SUPPORTED_LANGUAGES, Nature, StatStages } from './types';
 import { TYPE_CHART, TYPE_ZH, GENERATIONS } from './constants';
 
 // 属性颜色映射
@@ -80,10 +80,70 @@ const TYPE_ICONS: Record<string, any> = {
   dark: Moon,
 };
 
+const AILMENT_ZH: Record<string, string> = {
+  poison: '中毒',
+  paralysis: '麻痹',
+  burn: '灼伤',
+  freeze: '冰冻',
+  sleep: '睡眠',
+  confusion: '混乱',
+  infatuation: '着迷',
+  trap: '束缚',
+  nightmare: '噩梦',
+  leech_seed: '寄生种子',
+};
+
+const STAT_ZH: Record<string, string> = {
+  attack: '攻击',
+  defense: '防御',
+  spAtk: '特攻',
+  spDef: '特防',
+  speed: '速度',
+  accuracy: '命中',
+  evasion: '闪避',
+};
+
+const STAT_STAGE_MODIFIERS: Record<number, number> = {
+  '-6': 2 / 8,
+  '-5': 2 / 7,
+  '-4': 2 / 6,
+  '-3': 2 / 5,
+  '-2': 2 / 4,
+  '-1': 2 / 3,
+  '0': 1,
+  '1': 1.5,
+  '2': 2,
+  '3': 2.5,
+  '4': 3,
+  '5': 3.5,
+  '6': 4,
+};
+
+const ACC_EVA_STAGE_MODIFIERS: Record<number, number> = {
+  '-6': 3 / 9,
+  '-5': 3 / 8,
+  '-4': 3 / 7,
+  '-3': 3 / 6,
+  '-2': 3 / 5,
+  '-1': 3 / 4,
+  '0': 1,
+  '1': 4 / 3,
+  '2': 5 / 3,
+  '3': 6 / 3,
+  '4': 7 / 3,
+  '5': 8 / 3,
+  '6': 9 / 3,
+};
+
 const TypeBadge: React.FC<{ type: string, size?: 'xs' | 'sm' | 'md' | 'lg', className?: string }> = ({ type, size = 'sm', className = "" }) => {
   const Icon = TYPE_ICONS[type] || Sparkles;
   const color = TYPE_COLORS[type] || '#ccc';
-  const zhName = TYPE_ZH[type] || type;
+  
+  // 这里可以根据 currentLanguage 返回对应的属性名，但目前 TYPE_ZH 只有中文
+  // 简单处理：如果是 en，返回 type 原名，否则返回 TYPE_ZH
+  const getTypeName = () => {
+    return TYPE_ZH[type] || type;
+  };
   
   const sizeClasses = {
     xs: 'text-[8px] px-1.5 py-0.5 gap-1',
@@ -105,7 +165,7 @@ const TypeBadge: React.FC<{ type: string, size?: 'xs' | 'sm' | 'md' | 'lg', clas
       style={{ backgroundColor: color }}
     >
       <Icon className={`${iconSizes[size]} drop-shadow-sm`} />
-      <span>{zhName}</span>
+      <span>{getTypeName()}</span>
     </div>
   );
 };
@@ -281,6 +341,403 @@ export default function App() {
   const [infoPokemonIdx, setInfoPokemonIdx] = useState<number | null>(null);
   const [prevGameState, setPrevGameState] = useState<GameState>('START');
   const [showLogHistory, setShowLogHistory] = useState(false);
+  const [currentLanguage, setCurrentLanguage] = useState('zh-hans');
+
+  const uiStrings: Record<string, Record<string, string>> = {
+    'zh-hans': {
+      stage: '关卡',
+      switch: '出战',
+      info: '详情',
+      selectMove: '选择技能',
+      back: '返回',
+      victory: '胜利！',
+      chooseReward: '选择一项奖励以继续你的冒险',
+      viewTeam: '查看我的队伍',
+      randomRewards: '随机奖励',
+      getItem: '获得道具',
+      learnMove: '学习新技能',
+      learnMoveDesc: '让队伍中的一只宝可梦学习一个新技能',
+      specialReward: '特殊奖励',
+      joinTeam: '加入队伍',
+      selectThis: '选择此项',
+      mysteryShop: '神秘商店 (使用金币购买)',
+      insufficientCoins: '金币不足',
+      buyItem: '购买道具',
+      teamFull: '队伍已满！',
+      replacePartner: '选择一只宝可梦进行替换，以加入新的伙伴',
+      power: '威力',
+      accuracy: '命中',
+      pp: 'PP',
+      nature: '性格',
+      ability: '特性',
+      none: '无',
+      stats: '能力值',
+      currentMoves: '当前技能',
+      base: '种族',
+      iv: '个体',
+      physical: '物理',
+      special: '特攻',
+      status: '变化',
+      confirm: '确认',
+      cancel: '取消',
+      battleLog: '战斗记录',
+      hp: 'HP',
+      attack: '攻击',
+      defense: '防御',
+      spAtk: '特攻',
+      spDef: '特防',
+      speed: '速度',
+      catchSuccess: '捕捉成功！获得了 {coins} 金币！',
+      battleVictory: '战斗胜利！获得了 {coins} 金币！',
+      selectToLearn: '选择一只宝可梦来学习新的力量',
+      retrievingMoves: '正在检索可学习的技能...',
+      replaceWhichMove: '替换哪个技能？',
+      alreadyKnows4: '{name} 已经学会了4个技能。',
+      selectOldToReplace: '请选择一个旧技能来替换为 {move}。',
+      movesCount: '{count}/4 技能',
+      learnMoveBtn: '学习技能',
+      cancelReplace: '取消替换',
+      searchingPokemon: '正在寻找宝可梦...',
+      battleHistory: '对战历史',
+      chooseStarter: '选择你的初始伙伴',
+      chooseStarterDesc: '从这三只随机宝可梦中选择一只开始你的冒险',
+      startingMoves: '初始技能',
+      viewDetails: '查看详情',
+      iChooseYou: '就决定是你了！',
+      gymLeaderSent: '道馆馆主 派出了 {name}！',
+      wildPokemonAppeared: '野生的 {name} 出现了！',
+      youUsed: '你使用了 {name}！',
+      cannotCatchGym: '不能捕捉道馆馆主的宝可梦！',
+      catching: '正在捕捉...',
+      catchSuccessMsg: '成功捕捉了 {name}！',
+      joinedTeam: '{name} 已加入你的队伍！',
+      brokeFree: '{name} 挣脱了！',
+      withdrew: '你收回了 {name}！',
+      sentOut: '你派出了 {name}！',
+      usedMove: '{name} 使用了 {move}！',
+      superEffective: '这一击效果绝佳！',
+      notVeryEffective: '这一击收效甚微...',
+      noEffect: '似乎没有效果...',
+      causedDamage: '{name} 造成了 {damage} 点伤害。',
+      fainted: '{name} 倒下了！',
+      enemyUsedMove: '对手的 {name} 使用了 {move}！',
+      enemyCausedDamage: '对手的 {name} 造成了 {damage} 点伤害。',
+      noRecords: '尚无记录',
+      rogueJourney: '随机对战之旅：在无尽的挑战中生存',
+      startBattle: '开始对战',
+      selectRegion: '选择你的冒险地区',
+      nextStep: '下一步：选择等级',
+      setDifficulty: '设定初始挑战难度',
+      startAdventure: '开启冒险之旅',
+      thinking: '对手正在思考...',
+      commandPhase: '指令阶段',
+      whatToDo: '该怎么办呢？',
+      atkUp: '攻击↑',
+      defUp: '防御↑',
+      battle: '战斗',
+      bag: '背包',
+      pokemon: '宝可梦',
+      run: '逃跑',
+      myBag: '我的背包',
+      myTeam: '我的队伍',
+      bagEmpty: '背包空空如也',
+      backToMoves: '返回选择技能',
+      learningNewMove: '正在学习新技能...',
+      learnThisMove: '学习此技能',
+      noMoreMoves: '这只宝可梦暂时没有更多可学习的技能了。',
+      reselectPokemon: '重新选择宝可梦',
+      challengeEnd: '挑战结束',
+      fellAtStage: '你在第 {stage} 关倒下了',
+      restart: '重新开始'
+    },
+    'zh-hant': {
+      stage: '關卡',
+      switch: '出戰',
+      info: '詳情',
+      selectMove: '選擇技能',
+      back: '返回',
+      victory: '勝利！',
+      chooseReward: '選擇一項獎勵以繼續你的冒險',
+      viewTeam: '查看我的隊伍',
+      randomRewards: '隨機獎勵',
+      getItem: '獲得道具',
+      learnMove: '學習新技能',
+      learnMoveDesc: '讓隊伍中的一隻寶可夢學習一個新技能',
+      specialReward: '特殊獎勵',
+      joinTeam: '加入隊伍',
+      selectThis: '選擇此項',
+      mysteryShop: '神秘商店 (使用金幣購買)',
+      insufficientCoins: '金幣不足',
+      buyItem: '購買道具',
+      teamFull: '隊伍已滿！',
+      replacePartner: '選擇一隻寶可夢進行替換，以加入新的夥伴',
+      power: '威力',
+      accuracy: '命中',
+      pp: 'PP',
+      nature: '性格',
+      ability: '特性',
+      none: '無',
+      stats: '能力值',
+      currentMoves: '當前技能',
+      base: '種族',
+      iv: '個體',
+      physical: '物理',
+      special: '特攻',
+      status: '變化',
+      confirm: '確認',
+      cancel: '取消',
+      battleLog: '戰鬥記錄',
+      hp: 'HP',
+      attack: '攻擊',
+      defense: '防禦',
+      spAtk: '特攻',
+      spDef: '特防',
+      speed: '速度',
+      catchSuccess: '捕捉成功！獲得了 {coins} 金幣！',
+      battleVictory: '戰鬥勝利！獲得了 {coins} 金幣！',
+      selectToLearn: '選擇一隻寶可夢來學習新的力量',
+      retrievingMoves: '正在檢索可學習的技能...',
+      replaceWhichMove: '替換哪個技能？',
+      alreadyKnows4: '{name} 已經學會了4個技能。',
+      selectOldToReplace: '請選擇一個舊技能來替換為 {move}。',
+      movesCount: '{count}/4 技能',
+      learnMoveBtn: '學習技能',
+      cancelReplace: '取消替換',
+      searchingPokemon: '正在尋找寶可夢...',
+      battleHistory: '對戰歷史',
+      chooseStarter: '選擇你的初始夥伴',
+      chooseStarterDesc: '從這三隻隨機寶可夢中選擇一隻開始你的冒險',
+      startingMoves: '初始技能',
+      viewDetails: '查看詳情',
+      iChooseYou: '就決定是你了！',
+      gymLeaderSent: '道館館主 派出了 {name}！',
+      wildPokemonAppeared: '野生的 {name} 出現了！',
+      youUsed: '你使用了 {name}！',
+      cannotCatchGym: '不能捕捉道館館主的寶可夢！',
+      catching: '正在捕捉...',
+      catchSuccessMsg: '成功捕捉了 {name}！',
+      joinedTeam: '{name} 已加入你的隊伍！',
+      brokeFree: '{name} 掙脫了！',
+      withdrew: '你收回了 {name}！',
+      sentOut: '你派出了 {name}！',
+      usedMove: '{name} 使用了 {move}！',
+      superEffective: '這一擊效果絕佳！',
+      notVeryEffective: '這一擊收效甚微...',
+      noEffect: '似乎沒有效果...',
+      causedDamage: '{name} 造成了 {damage} 點傷害。',
+      fainted: '{name} 倒下了！',
+      enemyUsedMove: '對手的 {name} 使用了 {move}！',
+      enemyCausedDamage: '對手的 {name} 造成了 {damage} 點傷害。',
+      noRecords: '尚無記錄',
+      rogueJourney: '隨機對戰之旅：在無盡的挑戰中生存',
+      startBattle: '開始對戰',
+      selectRegion: '選擇你的冒險地區',
+      nextStep: '下一步：選擇等級',
+      setDifficulty: '設定初始挑戰難度',
+      startAdventure: '開啟冒險之旅',
+      thinking: '對手正在思考...',
+      commandPhase: '指令階段',
+      whatToDo: '該怎麼辦呢？',
+      atkUp: '攻擊↑',
+      defUp: '防禦↑',
+      battle: '戰鬥',
+      bag: '背包',
+      pokemon: '寶可夢',
+      run: '逃跑',
+      myBag: '我的背包',
+      myTeam: '我的隊伍',
+      bagEmpty: '背包空空如也',
+      backToMoves: '返回選擇技能',
+      learningNewMove: '正在學習新技能...',
+      learnThisMove: '學習此技能',
+      noMoreMoves: '這隻寶可夢暫時沒有更多可學習的技能了。',
+      reselectPokemon: '重新選擇寶可夢',
+      challengeEnd: '挑戰結束',
+      fellAtStage: '你在第 {stage} 關倒下了',
+      restart: '重新開始'
+    },
+    'en': {
+      stage: 'Stage',
+      switch: 'Switch',
+      info: 'Info',
+      selectMove: 'Select Move',
+      back: 'Back',
+      victory: 'Victory!',
+      chooseReward: 'Choose a reward to continue your adventure',
+      viewTeam: 'View My Team',
+      randomRewards: 'Random Rewards',
+      getItem: 'Get Item',
+      learnMove: 'Learn New Move',
+      learnMoveDesc: 'Let a Pokemon in your team learn a new move',
+      specialReward: 'Special Reward',
+      joinTeam: 'Join Team',
+      selectThis: 'Select This',
+      mysteryShop: 'Mystery Shop (Buy with Coins)',
+      insufficientCoins: 'Insufficient Coins',
+      buyItem: 'Buy Item',
+      teamFull: 'Team Full!',
+      replacePartner: 'Select a Pokemon to replace with the new partner',
+      power: 'Power',
+      accuracy: 'Accuracy',
+      pp: 'PP',
+      nature: 'Nature',
+      ability: 'Ability',
+      none: 'None',
+      stats: 'Stats',
+      currentMoves: 'Current Moves',
+      base: 'Base',
+      iv: 'IV',
+      physical: 'Physical',
+      special: 'Special',
+      status: 'Status',
+      confirm: 'Confirm',
+      cancel: 'Cancel',
+      battleLog: 'Battle Log',
+      hp: 'HP',
+      attack: 'Attack',
+      defense: 'Defense',
+      spAtk: 'Sp. Atk',
+      spDef: 'Sp. Def',
+      speed: 'Speed',
+      catchSuccess: 'Caught successfully! Earned {coins} coins!',
+      battleVictory: 'Victory! Earned {coins} coins!',
+      selectToLearn: 'Select a Pokemon to learn new power',
+      retrievingMoves: 'Retrieving learnable moves...',
+      replaceWhichMove: 'Replace which move?',
+      alreadyKnows4: '{name} already knows 4 moves.',
+      selectOldToReplace: 'Please select an old move to replace with {move}.',
+      movesCount: '{count}/4 Moves',
+      learnMoveBtn: 'Learn Move',
+      cancelReplace: 'Cancel',
+      searchingPokemon: 'Searching for Pokemon...',
+      battleHistory: 'Battle History',
+      chooseStarter: 'Choose Your Starter',
+      chooseStarterDesc: 'Choose one of these three random Pokemon to start your adventure',
+      startingMoves: 'Starting Moves',
+      viewDetails: 'View Details',
+      iChooseYou: 'I choose you!',
+      gymLeaderSent: 'Gym Leader sent out {name}!',
+      wildPokemonAppeared: 'A wild {name} appeared!',
+      youUsed: 'You used {name}!',
+      cannotCatchGym: 'Cannot catch Gym Leader\'s Pokemon!',
+      catching: 'Catching...',
+      catchSuccessMsg: 'Caught {name} successfully!',
+      joinedTeam: '{name} joined your team!',
+      brokeFree: '{name} broke free!',
+      withdrew: 'You withdrew {name}!',
+      sentOut: 'You sent out {name}!',
+      usedMove: '{name} used {move}!',
+      superEffective: 'It\'s super effective!',
+      notVeryEffective: 'It\'s not very effective...',
+      noEffect: 'It had no effect...',
+      causedDamage: '{name} caused {damage} damage.',
+      fainted: '{name} fainted!',
+      enemyUsedMove: 'Enemy {name} used {move}!',
+      enemyCausedDamage: 'Enemy {name} caused {damage} damage.',
+      noRecords: 'No records',
+      rogueJourney: 'Roguelike Journey: Survive in endless challenges',
+      startBattle: 'Start Battle',
+      selectRegion: 'Select Your Region',
+      nextStep: 'Next: Select Level',
+      setDifficulty: 'Set Initial Difficulty',
+      startAdventure: 'Start Adventure',
+      thinking: 'Enemy is thinking...',
+      commandPhase: 'Command Phase',
+      whatToDo: 'What will you do?',
+      atkUp: 'Atk↑',
+      defUp: 'Def↑',
+      battle: 'Battle',
+      bag: 'Bag',
+      pokemon: 'Pokemon',
+      run: 'Run',
+      myBag: 'My Bag',
+      myTeam: 'My Team',
+      bagEmpty: 'Bag is empty',
+      backToMoves: 'Back to Moves',
+      learningNewMove: 'Learning new move...',
+      learnThisMove: 'Learn this move',
+      noMoreMoves: 'This Pokemon has no more learnable moves for now.',
+      reselectPokemon: 'Reselect Pokemon',
+      challengeEnd: 'Challenge Ended',
+      fellAtStage: 'You fell at Stage {stage}',
+      restart: 'Restart'
+    }
+  };
+
+  const t = useCallback((key: string) => {
+    const lang = currentLanguage.startsWith('zh') ? currentLanguage : (uiStrings[currentLanguage] ? currentLanguage : 'en');
+    return uiStrings[lang]?.[key] || uiStrings['en']?.[key] || key;
+  }, [currentLanguage]);
+  const [showLangMenu, setShowLangMenu] = useState(false);
+
+  // 本地化辅助函数
+  const getLocalized = useCallback((obj: any, key: string = 'name') => {
+    if (!obj) return '';
+    
+    // 如果是道具，直接返回 zhName (目前道具是硬编码的)
+    if (obj.id && (obj.id === 'potion' || obj.id === 'pokeball' || obj.isBall || obj.isBattleItem)) {
+      return currentLanguage.startsWith('zh') ? obj.zhName : obj.name;
+    }
+
+    // 查找 names 数组
+    if (obj.names && Array.isArray(obj.names)) {
+      const entry = obj.names.find((n: any) => n.language.name === currentLanguage);
+      if (entry) return entry.name;
+      
+      // 备选方案：如果是中文，尝试找另一种中文
+      if (currentLanguage === 'zh-hans') {
+        const alt = obj.names.find((n: any) => n.language.name === 'zh-hant');
+        if (alt) return alt.name;
+      } else if (currentLanguage === 'zh-hant') {
+        const alt = obj.names.find((n: any) => n.language.name === 'zh-hans');
+        if (alt) return alt.name;
+      }
+      
+      // 默认返回英文
+      const en = obj.names.find((n: any) => n.language.name === 'en');
+      if (en) return en.name;
+    }
+
+    // 默认回退
+    return obj.zhName || obj.name || '';
+  }, [currentLanguage]);
+
+  const getLocalizedDesc = useCallback((obj: any) => {
+    if (!obj) return '';
+    
+    // 道具回退
+    if (obj.id && (obj.id === 'potion' || obj.id === 'pokeball' || obj.isBall || obj.isBattleItem)) {
+      return currentLanguage.startsWith('zh') ? obj.zhDescription : obj.description;
+    }
+
+    if (obj.flavor_text_entries && Array.isArray(obj.flavor_text_entries)) {
+      const entry = obj.flavor_text_entries.find((e: any) => e.language.name === currentLanguage);
+      if (entry) return entry.flavor_text.replace(/\f/g, ' ');
+
+      // 备选方案
+      if (currentLanguage === 'zh-hans') {
+        const alt = obj.flavor_text_entries.find((e: any) => e.language.name === 'zh-hant');
+        if (alt) return alt.flavor_text.replace(/\f/g, ' ');
+      } else if (currentLanguage === 'zh-hant') {
+        const alt = obj.flavor_text_entries.find((e: any) => e.language.name === 'zh-hans');
+        if (alt) return alt.flavor_text.replace(/\f/g, ' ');
+      }
+
+      const en = obj.flavor_text_entries.find((e: any) => e.language.name === 'en');
+      if (en) return en.flavor_text.replace(/\f/g, ' ');
+    }
+
+    return obj.zhDescription || obj.description || '';
+  }, [currentLanguage]);
+
+  const getLocalizedNature = useCallback((nature: Nature) => {
+    if (currentLanguage.startsWith('zh')) return nature.zhName;
+    return nature.name;
+  }, [currentLanguage]);
+
+  const getStatName = useCallback((stat: string) => {
+    return t(stat) || stat;
+  }, [t]);
 
   // 动画状态
   const [playerAnim, setPlayerAnim] = useState<'idle' | 'attack' | 'hit'>('idle');
@@ -369,9 +826,9 @@ export default function App() {
       setEnemy(p);
       setBattleLog([]);
       if (isGym) {
-        await addMessagesSequentially([`道馆馆主 派出了 ${p.zhName}！`]);
+        await addMessagesSequentially([`道馆馆主 派出了 ${getLocalized(p)}！`]);
       } else {
-        await addMessagesSequentially([`野生的 ${p.zhName} 出现了！`]);
+        await addMessagesSequentially([`野生的 ${getLocalized(p)} 出现了！`]);
       }
       setTurn('PLAYER');
       setBattleMenuTab('MAIN');
@@ -392,7 +849,7 @@ export default function App() {
     newInventory.splice(index, 1);
     setInventory(newInventory);
 
-    await addMessagesSequentially([`你使用了 ${item.zhName}！`]);
+    await addMessagesSequentially([`你使用了 ${getLocalized(item)}！`]);
 
     if (item.isBall) {
       if (enemy?.isGym) {
@@ -416,12 +873,12 @@ export default function App() {
       await addMessagesSequentially(["正在捕捉..."]);
       
       if (isSuccess) {
-        await addMessagesSequentially([`成功捕捉了 ${enemy!.zhName}！`]);
+        await addMessagesSequentially([`成功捕捉了 ${getLocalized(enemy!)}！`]);
         
         // 加入队伍
         if (playerTeam.length < 6) {
           setPlayerTeam(prev => [...prev, { ...enemy!, currentHp: enemy!.maxHp }]);
-          await addMessagesSequentially([`${enemy!.zhName} 已加入你的队伍！`]);
+          await addMessagesSequentially([`${getLocalized(enemy!)} 已加入你的队伍！`]);
           setTimeout(() => {
             winBattle(true);
             setIsCatching(false);
@@ -436,7 +893,7 @@ export default function App() {
           }, 500);
         }
       } else {
-        await addMessagesSequentially([`${enemy!.zhName} 挣脱了！`]);
+        await addMessagesSequentially([`${getLocalized(enemy!)} 挣脱了！`]);
         // 立即恢复精灵展示，不再等待气泡动画完全结束
         setIsCatching(false);
         setCatchSuccess(null);
@@ -467,7 +924,7 @@ export default function App() {
     newTeam[index] = temp;
     
     setPlayerTeam(newTeam);
-    await addMessagesSequentially([`你收回了 ${temp.zhName}！`, `你派出了 ${newTeam[0].zhName}！`]);
+    await addMessagesSequentially([t('withdrew').replace('{name}', getLocalized(temp)), t('sentOut').replace('{name}', getLocalized(newTeam[0]))]);
     setTurn('ENEMY');
     setBattleMenuTab('MAIN');
   };
@@ -485,38 +942,185 @@ export default function App() {
     if (!enemy || gameState !== 'BATTLE' || turn !== 'PLAYER' || isMessageProcessing) return;
 
     const player = playerTeam[0];
+    
+    // 检查异常状态限制 (如麻痹、睡眠、冰冻)
+    if (player.status === 'sleep') {
+      await addMessagesSequentially([`${getLocalized(player)} 正在呼呼大睡...`]);
+      if (Math.random() < 0.33) {
+        const updatedTeam = [...playerTeam];
+        updatedTeam[0] = { ...player, status: undefined };
+        setPlayerTeam(updatedTeam);
+        await addMessagesSequentially([`${getLocalized(player)} 醒过来了！`]);
+      } else {
+        setTurn('ENEMY');
+        return;
+      }
+    }
+    if (player.status === 'freeze') {
+      await addMessagesSequentially([`${getLocalized(player)} 冻得严严实实...`]);
+      if (Math.random() < 0.2) {
+        const updatedTeam = [...playerTeam];
+        updatedTeam[0] = { ...player, status: undefined };
+        setPlayerTeam(updatedTeam);
+        await addMessagesSequentially([`${getLocalized(player)} 的冰融化了！`]);
+      } else {
+        setTurn('ENEMY');
+        return;
+      }
+    }
+    if (player.status === 'paralysis' && Math.random() < 0.25) {
+      await addMessagesSequentially([`${getLocalized(player)} 麻痹了，无法动弹！`]);
+      setTurn('ENEMY');
+      return;
+    }
+
     setActiveMoveType(move.type);
     setPlayerAnim('attack');
     
     // 1. 使用技能消息
-    await addMessagesSequentially([`${player.zhName} 使用了 ${move.zhName}！`]);
+    await addMessagesSequentially([t('usedMove').replace('{name}', getLocalized(player)).replace('{move}', getLocalized(move))]);
     
-    const { damage, multiplier } = calculateDamage(move, player, enemy, activeBuffs.atk, enemyBuffs.def);
+    const { damage, multiplier, isMiss, isCrit } = calculateDamage(move, player, enemy, activeBuffs.atk, enemyBuffs.def);
+    
+    if (isMiss) {
+      await addMessagesSequentially([`${getLocalized(player)} 的攻击落空了！`]);
+      setPlayerAnim('idle');
+      setActiveMoveType(null);
+      setTurn('ENEMY');
+      return;
+    }
+
+    if (isCrit) {
+      await addMessagesSequentially(['击中了要害！']);
+    }
+
     const newEnemyHp = Math.max(0, enemy.currentHp - damage);
     
-    setEnemyAnim('hit');
-    setEnemy({ ...enemy, currentHp: newEnemyHp });
+    if (damage > 0) {
+      setEnemyAnim('hit');
+    }
+    let updatedEnemy = { ...enemy, currentHp: newEnemyHp };
+    
+    // 处理吸血
+    let playerHpChange = 0;
+    if (move.drain !== 0 && damage > 0) {
+      const drainAmount = Math.floor(damage * move.drain / 100);
+      playerHpChange += drainAmount;
+    }
+    // 处理回血
+    if (move.healing !== 0) {
+      const healAmount = Math.floor(player.maxHp * move.healing / 100);
+      playerHpChange += healAmount;
+    }
+
+    const finalPlayerHp = Math.max(0, Math.min(player.maxHp, player.currentHp + playerHpChange));
+    const updatedTeam = [...playerTeam];
+    updatedTeam[0] = { ...player, currentHp: finalPlayerHp };
+    setPlayerTeam(updatedTeam);
+
+    if (playerHpChange > 0) {
+      await addMessagesSequentially([`${getLocalized(player)} 恢复了体力！`]);
+    } else if (playerHpChange < 0) {
+      await addMessagesSequentially([`${getLocalized(player)} 受到了反作用力伤害！`]);
+    }
+
+    setEnemy(updatedEnemy);
     setPlayerAnim('idle');
     setActiveMoveType(null);
     setActiveBuffs(prev => ({ ...prev, atk: false }));
 
     // 2. 效果消息
     const effectMessages = [];
-    if (multiplier > 1) effectMessages.push("这一击效果绝佳！");
-    if (multiplier < 1 && multiplier > 0) effectMessages.push("这一击收效甚微...");
-    if (multiplier === 0) effectMessages.push("似乎没有效果...");
+    if (damage > 0) {
+      if (multiplier > 1) effectMessages.push(t('superEffective'));
+      if (multiplier < 1 && multiplier > 0) effectMessages.push(t('notVeryEffective'));
+      if (multiplier === 0) effectMessages.push(t('noEffect'));
+    }
     
     if (effectMessages.length > 0) {
       await addMessagesSequentially(effectMessages);
     }
 
     // 3. 伤害消息
-    await addMessagesSequentially([`${player.zhName} 造成了 ${damage} 点伤害。`]);
+    if (damage > 0) {
+      await addMessagesSequentially([t('causedDamage').replace('{name}', getLocalized(player)).replace('{damage}', damage.toString())]);
+    }
     
+    // 4. 处理附加效果 (异常状态和能力变化)
+    if (newEnemyHp > 0) {
+      const isTargetUser = move.target === 'user';
+      const targetPokemon = isTargetUser ? updatedTeam[0] : updatedEnemy;
+      const isEnemyTarget = !isTargetUser;
+
+      // 异常状态
+      if (move.ailment && !targetPokemon.status && Math.random() * 100 < (move.ailmentChance || 100)) {
+        targetPokemon.status = move.ailment;
+        if (isEnemyTarget) {
+          setEnemy({ ...targetPokemon });
+        } else {
+          updatedTeam[0] = { ...targetPokemon };
+          setPlayerTeam([...updatedTeam]);
+        }
+        await addMessagesSequentially([`${getLocalized(targetPokemon)} ${AILMENT_ZH[move.ailment] || move.ailment}了！`]);
+      }
+      
+      // 能力变化
+      if (move.statChanges) {
+        const newStatStages = { ...targetPokemon.statStages };
+        let changed = false;
+        for (const sc of move.statChanges) {
+          const statKey = sc.stat as keyof StatStages;
+          if (newStatStages[statKey] !== undefined) {
+            const oldStage = newStatStages[statKey];
+            const newStage = Math.max(-6, Math.min(6, oldStage + sc.change));
+            if (newStage !== oldStage) {
+              newStatStages[statKey] = newStage;
+              changed = true;
+              const changeText = sc.change > 0 ? '提升' : '下降';
+              const statName = STAT_ZH[sc.stat] || sc.stat;
+              await addMessagesSequentially([`${getLocalized(targetPokemon)} 的 ${statName} ${changeText}了！`]);
+            }
+          }
+        }
+        if (changed) {
+          targetPokemon.statStages = newStatStages;
+          if (isEnemyTarget) {
+            setEnemy({ ...targetPokemon });
+          } else {
+            updatedTeam[0] = { ...targetPokemon };
+            setPlayerTeam([...updatedTeam]);
+          }
+        }
+      }
+
+      // 畏缩 (这里简单处理，直接跳过对手回合)
+      if (Math.random() * 100 < (move.flinchChance || 0)) {
+        await addMessagesSequentially([`${getLocalized(updatedEnemy)} 畏缩了，无法动弹！`]);
+        // 畏缩只持续一回合，这里通过不切换 turn 来实现
+        setEnemyAnim('idle');
+        return; 
+      }
+    }
+
+    // 5. 状态回合结束伤害 (中毒, 灼伤)
+    if (newEnemyHp > 0 && (updatedEnemy.status === 'poison' || updatedEnemy.status === 'burn')) {
+      const statusDamage = Math.floor(updatedEnemy.maxHp / 8);
+      const finalEnemyHpStatus = Math.max(0, updatedEnemy.currentHp - statusDamage);
+      updatedEnemy.currentHp = finalEnemyHpStatus;
+      setEnemy({ ...updatedEnemy });
+      await addMessagesSequentially([`${getLocalized(updatedEnemy)} 受到了 ${AILMENT_ZH[updatedEnemy.status]} 伤害！`]);
+      
+      if (finalEnemyHpStatus <= 0) {
+        await addMessagesSequentially([t('fainted').replace('{name}', getLocalized(updatedEnemy))]);
+        setTimeout(() => winBattle(), 500);
+        return;
+      }
+    }
+
     setEnemyAnim('idle');
     
     if (newEnemyHp <= 0) {
-      await addMessagesSequentially([`${enemy.zhName} 倒下了！`]);
+      await addMessagesSequentially([t('fainted').replace('{name}', getLocalized(enemy))]);
       setTimeout(() => winBattle(), 500);
       return;
     }
@@ -529,19 +1133,82 @@ export default function App() {
     if (!enemy || !playerTeam[0] || turn !== 'ENEMY' || isMessageProcessing) return;
 
     const player = playerTeam[0];
+    
+    // 检查异常状态限制
+    if (enemy.status === 'sleep') {
+      await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 正在呼呼大睡...`]);
+      if (Math.random() < 0.33) {
+        setEnemy({ ...enemy, status: undefined });
+        await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 醒过来了！`]);
+      } else {
+        setTurn('PLAYER');
+        return;
+      }
+    }
+    if (enemy.status === 'freeze') {
+      await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 冻得严严实实...`]);
+      if (Math.random() < 0.2) {
+        setEnemy({ ...enemy, status: undefined });
+        await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 的冰融化了！`]);
+      } else {
+        setTurn('PLAYER');
+        return;
+      }
+    }
+    if (enemy.status === 'paralysis' && Math.random() < 0.25) {
+      await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 麻痹了，无法动弹！`]);
+      setTurn('PLAYER');
+      return;
+    }
+
     const move = enemy.selectedMoves[Math.floor(Math.random() * enemy.selectedMoves.length)];
     setActiveMoveType(move.type);
     setEnemyAnim('attack');
     
     // 1. 对手使用技能
-    await addMessagesSequentially([`对手的 ${enemy.zhName} 使用了 ${move.zhName}！`]);
+    await addMessagesSequentially([t('enemyUsedMove').replace('{name}', getLocalized(enemy)).replace('{move}', getLocalized(move))]);
 
-    const { damage, multiplier } = calculateDamage(move, enemy, player, enemyBuffs.atk, activeBuffs.def);
+    const { damage, multiplier, isMiss, isCrit } = calculateDamage(move, enemy, player, enemyBuffs.atk, activeBuffs.def);
+    
+    if (isMiss) {
+      await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 的攻击落空了！`]);
+      setEnemyAnim('idle');
+      setActiveMoveType(null);
+      setTurn('PLAYER');
+      return;
+    }
+
+    if (isCrit) {
+      await addMessagesSequentially(['击中了要害！']);
+    }
+
     const newPlayerHp = Math.max(0, player.currentHp - damage);
     
-    setPlayerAnim('hit');
+    if (damage > 0) {
+      setPlayerAnim('hit');
+    }
     const updatedTeam = [...playerTeam];
-    updatedTeam[0] = { ...player, currentHp: newPlayerHp };
+    let updatedPlayer = { ...player, currentHp: newPlayerHp };
+    
+    // 处理吸血和回血
+    let enemyHpChange = 0;
+    if (move.drain !== 0 && damage > 0) {
+      enemyHpChange += Math.floor(damage * move.drain / 100);
+    }
+    if (move.healing !== 0) {
+      enemyHpChange += Math.floor(enemy.maxHp * move.healing / 100);
+    }
+    
+    const finalEnemyHp = Math.max(0, Math.min(enemy.maxHp, enemy.currentHp + enemyHpChange));
+    setEnemy({ ...enemy, currentHp: finalEnemyHp });
+
+    if (enemyHpChange > 0) {
+      await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 恢复了体力！`]);
+    } else if (enemyHpChange < 0) {
+      await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 受到了反作用力伤害！`]);
+    }
+
+    updatedTeam[0] = updatedPlayer;
     setPlayerTeam(updatedTeam);
     setEnemyAnim('idle');
     setActiveMoveType(null);
@@ -549,21 +1216,109 @@ export default function App() {
 
     // 2. 效果消息
     const effectMessages = [];
-    if (multiplier > 1) effectMessages.push("这一击效果绝佳！");
-    if (multiplier < 1 && multiplier > 0) effectMessages.push("这一击收效甚微...");
-    if (multiplier === 0) effectMessages.push("似乎没有效果...");
+    if (damage > 0) {
+      if (multiplier > 1) effectMessages.push(t('superEffective'));
+      if (multiplier < 1 && multiplier > 0) effectMessages.push(t('notVeryEffective'));
+      if (multiplier === 0) effectMessages.push(t('noEffect'));
+    }
     
     if (effectMessages.length > 0) {
       await addMessagesSequentially(effectMessages);
     }
 
     // 3. 伤害消息
-    await addMessagesSequentially([`对手的 ${enemy.zhName} 造成了 ${damage} 点伤害。`]);
+    if (damage > 0) {
+      await addMessagesSequentially([t('enemyCausedDamage').replace('{name}', getLocalized(enemy)).replace('{damage}', damage.toString())]);
+    }
+
+    // 4. 附加效果
+    if (newPlayerHp > 0) {
+      const isTargetUser = move.target === 'user';
+      const targetPokemon = isTargetUser ? { ...enemy, currentHp: finalEnemyHp } : updatedPlayer;
+      const isPlayerTarget = !isTargetUser;
+
+      // 异常状态
+      if (move.ailment && !targetPokemon.status && Math.random() * 100 < (move.ailmentChance || 100)) {
+        targetPokemon.status = move.ailment;
+        if (isPlayerTarget) {
+          updatedTeam[0] = { ...targetPokemon };
+          setPlayerTeam([...updatedTeam]);
+        } else {
+          setEnemy({ ...targetPokemon });
+        }
+        await addMessagesSequentially([`${getLocalized(targetPokemon)} ${AILMENT_ZH[move.ailment] || move.ailment}了！`]);
+      }
+      
+      // 能力变化
+      if (move.statChanges) {
+        const newStatStages = { ...targetPokemon.statStages };
+        let changed = false;
+        for (const sc of move.statChanges) {
+          const statKey = sc.stat as keyof StatStages;
+          if (newStatStages[statKey] !== undefined) {
+            const oldStage = newStatStages[statKey];
+            const newStage = Math.max(-6, Math.min(6, oldStage + sc.change));
+            if (newStage !== oldStage) {
+              newStatStages[statKey] = newStage;
+              changed = true;
+              const changeText = sc.change > 0 ? '提升' : '下降';
+              const statName = STAT_ZH[sc.stat] || sc.stat;
+              await addMessagesSequentially([`${getLocalized(targetPokemon)} 的 ${statName} ${changeText}了！`]);
+            }
+          }
+        }
+        if (changed) {
+          targetPokemon.statStages = newStatStages;
+          if (isPlayerTarget) {
+            updatedTeam[0] = { ...targetPokemon };
+            setPlayerTeam([...updatedTeam]);
+          } else {
+            setEnemy({ ...targetPokemon });
+          }
+        }
+      }
+
+      // 畏缩
+      if (Math.random() * 100 < (move.flinchChance || 0)) {
+        await addMessagesSequentially([`${getLocalized(updatedPlayer)} 畏缩了，无法动弹！`]);
+        setPlayerAnim('idle');
+        return;
+      }
+    }
+
+    // 5. 状态回合结束伤害
+    if (updatedPlayer.currentHp > 0 && (updatedPlayer.status === 'poison' || updatedPlayer.status === 'burn')) {
+      const statusDamage = Math.floor(updatedPlayer.maxHp / 8);
+      const finalPlayerHpStatus = Math.max(0, updatedPlayer.currentHp - statusDamage);
+      updatedPlayer.currentHp = finalPlayerHpStatus;
+      updatedTeam[0] = { ...updatedPlayer };
+      setPlayerTeam([...updatedTeam]);
+      await addMessagesSequentially([`${getLocalized(updatedPlayer)} 受到了 ${AILMENT_ZH[updatedPlayer.status]} 伤害！`]);
+      
+      if (finalPlayerHpStatus <= 0) {
+        await addMessagesSequentially([t('fainted').replace('{name}', getLocalized(updatedPlayer))]);
+        
+        const aliveIdx = updatedTeam.findIndex(p => p.currentHp > 0);
+        if (aliveIdx === -1) {
+          setTimeout(() => setGameState('GAMEOVER'), 500);
+        } else {
+          const newTeam = [...updatedTeam];
+          const temp = newTeam[0];
+          newTeam[0] = newTeam[aliveIdx];
+          newTeam[aliveIdx] = temp;
+          setPlayerTeam(newTeam);
+          await addMessagesSequentially([t('sentOut').replace('{name}', getLocalized(newTeam[0]))]);
+          setTurn('PLAYER');
+          setBattleMenuTab('MAIN');
+        }
+        return;
+      }
+    }
 
     setPlayerAnim('idle');
     
     if (newPlayerHp <= 0) {
-      await addMessagesSequentially([`${player.zhName} 倒下了！`]);
+      await addMessagesSequentially([t('fainted').replace('{name}', getLocalized(player))]);
       
       const aliveIdx = updatedTeam.findIndex(p => p.currentHp > 0);
       if (aliveIdx === -1) {
@@ -575,7 +1330,7 @@ export default function App() {
         newTeam[0] = newTeam[aliveIdx];
         newTeam[aliveIdx] = temp;
         setPlayerTeam(newTeam);
-        await addMessagesSequentially([`你派出了 ${newTeam[0].zhName}！`]);
+        await addMessagesSequentially([t('sentOut').replace('{name}', getLocalized(newTeam[0]))]);
         setTurn('PLAYER');
         setBattleMenuTab('MAIN');
       }
@@ -584,7 +1339,7 @@ export default function App() {
 
     setTurn('PLAYER');
     setBattleMenuTab('MAIN');
-  }, [enemy, playerTeam, turn, activeBuffs, enemyBuffs, isMessageProcessing, gameState]);
+  }, [enemy, playerTeam, turn, enemyBuffs, activeBuffs, isMessageProcessing, gameState]);
 
   useEffect(() => {
     if (turn === 'ENEMY' && gameState === 'BATTLE') {
@@ -593,6 +1348,10 @@ export default function App() {
   }, [turn, gameState, enemyTurn]);
 
   const calculateDamage = (move: Move, attacker: GamePokemon, defender: GamePokemon, atkBuff: boolean, defBuff: boolean) => {
+    if (move.damage_class === 'status') {
+      return { damage: 0, multiplier: 1, isMiss: false, isCrit: false };
+    }
+
     const basePower = move.power || 40;
     const levelMult = (2 * attacker.level / 5) + 2;
     
@@ -600,13 +1359,21 @@ export default function App() {
     let def = 50;
     
     if (move.damage_class === 'special') {
-      atk = attacker.calculatedStats.spAtk;
-      def = defender.calculatedStats.spDef;
+      atk = attacker.calculatedStats.spAtk * (STAT_STAGE_MODIFIERS[attacker.statStages.spAtk as keyof typeof STAT_STAGE_MODIFIERS] || 1);
+      def = defender.calculatedStats.spDef * (STAT_STAGE_MODIFIERS[defender.statStages.spDef as keyof typeof STAT_STAGE_MODIFIERS] || 1);
     } else {
-      atk = attacker.calculatedStats.attack;
-      def = defender.calculatedStats.defense;
+      atk = attacker.calculatedStats.attack * (STAT_STAGE_MODIFIERS[attacker.statStages.attack as keyof typeof STAT_STAGE_MODIFIERS] || 1);
+      def = defender.calculatedStats.defense * (STAT_STAGE_MODIFIERS[defender.statStages.defense as keyof typeof STAT_STAGE_MODIFIERS] || 1);
     }
     
+    // 异常状态影响
+    if (attacker.status === 'burn' && move.damage_class === 'physical') {
+      atk *= 0.5;
+    }
+    if (attacker.status === 'paralysis') {
+      // 速度减半在先手判断中处理，这里不影响伤害
+    }
+
     // 计算属性克制
     let multiplier = 1;
     defender.types.forEach(t => {
@@ -616,12 +1383,32 @@ export default function App() {
       }
     });
 
-    let damage = Math.floor((((levelMult * basePower * atk / def) / 50) + 2) * (Math.random() * 0.15 + 0.85) * multiplier);
+    // 命中判断
+    const accStage = attacker.statStages.accuracy;
+    const evaStage = defender.statStages.evasion;
+    const combinedStage = Math.max(-6, Math.min(6, accStage - evaStage));
+    const accuracyMod = ACC_EVA_STAGE_MODIFIERS[combinedStage as keyof typeof ACC_EVA_STAGE_MODIFIERS] || 1;
+    const finalAccuracy = (move.accuracy || 100) * accuracyMod;
+    
+    if (Math.random() * 100 > finalAccuracy && move.accuracy !== null) {
+      return { damage: 0, multiplier: 0, isMiss: true, isCrit: false };
+    }
+
+    // 会心一击判断
+    let critChance = 1/24;
+    if (move.critRate === 1) critChance = 1/8;
+    if (move.critRate === 2) critChance = 1/2;
+    if (move.critRate >= 3) critChance = 1;
+    
+    const isCrit = Math.random() < critChance;
+    const critMult = isCrit ? 1.5 : 1;
+
+    let damage = Math.floor((((levelMult * basePower * atk / def) / 50) + 2) * (Math.random() * 0.15 + 0.85) * multiplier * critMult);
     
     if (atkBuff) damage = Math.floor(damage * 1.5);
     if (defBuff) damage = Math.floor(damage * 0.7);
     
-    return { damage, multiplier };
+    return { damage, multiplier, isMiss: false, isCrit };
   };
 
   const winBattle = async (isCatch = false) => {
@@ -667,7 +1454,9 @@ export default function App() {
       setRewards(newRewards);
       setGameState('REWARD');
       
-      const winMsg = isCatch ? `捕捉成功！获得了 ${earnedCoins} 金币！` : `战斗胜利！获得了 ${earnedCoins} 金币！`;
+      const winMsg = isCatch 
+        ? t('catchSuccess').replace('{coins}', earnedCoins.toString()) 
+        : t('battleVictory').replace('{coins}', earnedCoins.toString());
       await addMessagesSequentially([winMsg]);
     } catch (err) {
       console.error(err);
@@ -787,7 +1576,7 @@ export default function App() {
               <Target className="w-6 h-6 text-red-500" />
             </div>
           </div>
-          <p className="text-2xl font-black tracking-tighter uppercase italic">正在寻找宝可梦...</p>
+          <p className="text-2xl font-black tracking-tighter uppercase italic">{t('searchingPokemon')}</p>
         </div>
       </div>
     );
@@ -803,22 +1592,87 @@ export default function App() {
       <div className="max-w-6xl mx-auto h-full flex flex-col p-2 md:p-4 relative z-10 overflow-hidden">
         
         {/* 顶部状态栏 */}
-        <header className="flex justify-between items-center flex-none mb-2">
+        <header className="flex justify-between items-center flex-none mb-4 relative z-50">
           <div className="flex items-center gap-4">
-            <div className="bg-white px-6 py-2 skew-x-[-12deg] shadow-md border-l-4 border-blue-500">
-              <h1 className="text-xl font-black italic tracking-tighter skew-x-[12deg]">POKE ROGUELIKE</h1>
+            <div className="bg-slate-900 px-6 py-2 skew-x-[-12deg] shadow-xl border-l-4 border-blue-500">
+              <h1 className="text-xl font-black italic tracking-tighter skew-x-[12deg] text-white uppercase">Poke Roguelike</h1>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="bg-white px-4 py-1 skew-x-[-12deg] shadow-sm border-r-4 border-yellow-500 mr-2">
-              <span className="font-bold skew-x-[12deg] inline-block flex items-center gap-1">
-                <span className="text-yellow-600">●</span> {coins}
-              </span>
+
+          <div className="flex items-center gap-3">
+            {/* 语言切换器 */}
+            <div className="relative">
+              <button 
+                onClick={() => setShowLangMenu(!showLangMenu)}
+                className="bg-white px-4 py-1.5 skew-x-[-12deg] shadow-sm border border-slate-200 hover:border-blue-500 transition-all group flex items-center gap-2 pointer-events-auto"
+              >
+                <div className="skew-x-[12deg] flex items-center gap-2">
+                  <Eye className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">
+                    {SUPPORTED_LANGUAGES.find(l => l.code === currentLanguage)?.name}
+                  </span>
+                </div>
+              </button>
+              
+              <AnimatePresence>
+                {showLangMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute right-0 mt-2 w-40 bg-white shadow-2xl border-4 border-slate-900 overflow-hidden z-[100] pointer-events-auto"
+                  >
+                    <div className="p-1 grid grid-cols-1">
+                      {SUPPORTED_LANGUAGES.map(lang => (
+                        <button
+                          key={lang.code}
+                          onClick={() => {
+                            setCurrentLanguage(lang.code);
+                            setShowLangMenu(false);
+                          }}
+                          className={`px-4 py-2 text-left text-[10px] font-black italic uppercase transition-all ${
+                            currentLanguage === lang.code 
+                              ? 'bg-slate-900 text-white' 
+                              : 'text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {lang.name}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-            <div className="bg-white px-4 py-1 skew-x-[-12deg] shadow-sm border-r-4 border-red-500">
-              <span className="font-bold skew-x-[12deg] inline-block">关卡 {stage}</span>
-            </div>
-            {gameState === 'STARTER_SELECT' && (
+
+            {gameState !== 'START' && (
+              <>
+                <div className="bg-white px-4 py-1.5 skew-x-[-12deg] shadow-sm border-r-4 border-yellow-500">
+                  <span className="font-black italic skew-x-[12deg] inline-block flex items-center gap-2 text-sm">
+                    <Sparkles className="w-4 h-4 text-yellow-500" /> {coins}
+                  </span>
+                </div>
+                <div className="bg-white px-4 py-1.5 skew-x-[-12deg] shadow-sm border-r-4 border-red-500">
+                  <span className="font-black italic skew-x-[12deg] inline-block text-sm uppercase tracking-widest">
+                    {currentLanguage.startsWith('zh') ? '关卡' : 'Stage'} {stage}
+                  </span>
+                </div>
+              </>
+            )}
+
+            {gameState === 'BATTLE' && (
+              <button 
+                onClick={() => setShowLogHistory(!showLogHistory)}
+                className={`p-2 skew-x-[-12deg] transition-all shadow-sm border pointer-events-auto ${showLogHistory ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-900 border-slate-200 hover:border-slate-900'}`}
+                title={t('battleHistory')}
+              >
+                <RefreshCw className={`w-4 h-4 skew-x-[12deg] ${showLogHistory ? 'rotate-180' : ''} transition-transform duration-500`} />
+              </button>
+            )}
+          </div>
+        </header>
+
+        {gameState === 'STARTER_SELECT' && (
             <motion.div 
               key="starter-select"
               initial={{ opacity: 0, y: 50 }}
@@ -827,9 +1681,9 @@ export default function App() {
             >
               <div className="text-center mb-8 flex-none">
                 <div className="inline-block bg-slate-900 px-12 py-3 skew-x-[-12deg] shadow-xl mb-4">
-                  <h2 className="text-4xl font-black italic tracking-tighter skew-x-[12deg] text-white">选择你的初始伙伴</h2>
+                  <h2 className="text-4xl font-black italic tracking-tighter skew-x-[12deg] text-white">{t('chooseStarter')}</h2>
                 </div>
-                <p className="text-slate-500 font-bold italic text-sm">从这三只随机宝可梦中选择一只开始你的冒险</p>
+                <p className="text-slate-500 font-bold italic text-sm">{t('chooseStarterDesc')}</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-8 max-w-5xl mx-auto w-full">
@@ -845,12 +1699,12 @@ export default function App() {
                       <div className="absolute inset-0 bg-blue-50 rounded-full scale-110 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                       <img 
                         src={p.sprites.front_default} 
-                        alt={p.zhName} 
+                        alt={getLocalized(p)} 
                         className="w-40 h-40 object-contain relative z-10 drop-shadow-xl"
                         referrerPolicy="no-referrer"
                       />
                     </div>
-                    <h3 className="text-3xl font-black italic mb-2 uppercase tracking-tighter">{p.zhName}</h3>
+                    <h3 className="text-3xl font-black italic mb-2 uppercase tracking-tighter">{getLocalized(p)}</h3>
                     <div className="flex gap-1 mb-6">
                       {p.types.map((t: any) => (
                         <TypeBadge key={t.type.name} type={t.type.name} size="sm" className="skew-x-[-10deg]" />
@@ -858,10 +1712,10 @@ export default function App() {
                     </div>
 
                     <div className="w-full space-y-2 mb-8">
-                      <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">初始技能</div>
+                      <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">{t('startingMoves')}</div>
                       {p.selectedMoves.map((m, mi) => (
                         <div key={mi} className="flex justify-between items-center bg-slate-50 p-2 text-xs font-bold italic border-l-4 border-slate-200">
-                          <span>{m.zhName}</span>
+                          <span>{getLocalized(m)}</span>
                           <TypeBadge type={m.type} size="xs" />
                         </div>
                       ))}
@@ -876,13 +1730,13 @@ export default function App() {
                         }}
                         className="flex-1 py-3 bg-slate-100 text-slate-600 font-black italic hover:bg-slate-200 transition-all text-sm"
                       >
-                        查看详情
+                        {t('viewDetails')}
                       </button>
                       <button
                         onClick={() => selectStarter(idx)}
                         className="flex-[2] py-3 bg-slate-900 text-white font-black italic hover:bg-blue-600 transition-all text-sm shadow-lg"
                       >
-                        就决定是你了！
+                        {t('iChooseYou')}
                       </button>
                     </div>
                   </div>
@@ -890,19 +1744,6 @@ export default function App() {
               </div>
             </motion.div>
           )}
-
-          {gameState === 'BATTLE' && (
-              <button 
-                onClick={() => setShowLogHistory(!showLogHistory)}
-                className={`p-2 skew-x-[-12deg] transition-all shadow-sm border ${showLogHistory ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-900 border-slate-200 hover:border-slate-900'}`}
-                title="对战历史"
-              >
-                <RefreshCw className={`w-4 h-4 skew-x-[12deg] ${showLogHistory ? 'rotate-180' : ''} transition-transform duration-500`} />
-              </button>
-            )}
-          </div>
-        </header>
-
         {/* 对战历史悬浮窗 */}
         <AnimatePresence>
           {showLogHistory && gameState === 'BATTLE' && (
@@ -1124,7 +1965,14 @@ export default function App() {
                   <div className="bg-white p-3 shadow-lg border-r-8 border-red-500 w-72 skew-x-[-10deg] mb-4">
                     <div className="skew-x-[10deg] flex flex-col gap-1">
                       <div className="flex justify-between items-end">
-                        <span className="font-black text-xl italic uppercase">{enemy.zhName}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-xl italic uppercase">{getLocalized(enemy)}</span>
+                          {enemy.status && (
+                            <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 font-black uppercase tracking-tighter">
+                              {AILMENT_ZH[enemy.status] || enemy.status}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-xs font-bold bg-slate-900 text-white px-2 py-0.5">Lv.{enemy.level}</span>
                       </div>
                       <div className="flex gap-1 mb-1">
@@ -1165,7 +2013,14 @@ export default function App() {
                   <div className="bg-white p-3 shadow-lg border-l-8 border-blue-500 w-72 skew-x-[-10deg] mt-[-40px] relative z-20">
                     <div className="skew-x-[10deg] flex flex-col gap-1">
                       <div className="flex justify-between items-end">
-                        <span className="font-black text-xl italic uppercase">{playerTeam[0].zhName}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-xl italic uppercase">{getLocalized(playerTeam[0])}</span>
+                          {playerTeam[0].status && (
+                            <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 font-black uppercase tracking-tighter">
+                              {AILMENT_ZH[playerTeam[0].status] || playerTeam[0].status}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-xs font-bold bg-slate-900 text-white px-2 py-0.5">Lv.{playerTeam[0].level}</span>
                       </div>
                       <div className="flex gap-1 mb-1">
@@ -1427,8 +2282,8 @@ export default function App() {
                                     className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-none skew-x-[-4deg] transition-all text-left group"
                                   >
                                     <div className="skew-x-[4deg]">
-                                      <div className="font-black text-sm group-hover:text-blue-600">{item.zhName}</div>
-                                      <div className="text-[10px] text-slate-500 mt-1 line-clamp-1">{item.zhDescription}</div>
+                                      <div className="font-black text-sm group-hover:text-blue-600">{getLocalized(item)}</div>
+                                      <div className="text-[10px] text-slate-500 mt-1 line-clamp-1">{getLocalizedDesc(item)}</div>
                                     </div>
                                   </button>
                                 )) : (
@@ -1459,7 +2314,7 @@ export default function App() {
                                     <div className="skew-x-[4deg] flex items-center gap-2 w-full">
                                       <img src={p.sprites.front_default} className="w-10 h-10 object-contain" referrerPolicy="no-referrer" />
                                       <div className="flex-1 overflow-hidden">
-                                        <div className="font-black text-[10px] truncate uppercase">{p.zhName}</div>
+                                        <div className="font-black text-[10px] truncate uppercase">{getLocalized(p)}</div>
                                         <div className="h-1.5 bg-slate-200 mt-1">
                                           <div className="h-full bg-blue-500" style={{ width: `${(p.currentHp / p.maxHp) * 100}%` }}></div>
                                         </div>
@@ -1470,7 +2325,7 @@ export default function App() {
                                           onClick={() => switchPokemon(idx)}
                                           className="px-2 py-1 bg-blue-500 text-white text-[8px] font-black italic hover:bg-blue-600 disabled:opacity-50"
                                         >
-                                          出战
+                                          {t('switch')}
                                         </button>
                                         <button
                                           onClick={() => {
@@ -1480,7 +2335,7 @@ export default function App() {
                                           }}
                                           className="px-2 py-1 bg-slate-900 text-white text-[8px] font-black italic hover:bg-slate-700"
                                         >
-                                          详情
+                                          {t('info')}
                                         </button>
                                       </div>
                                     </div>
@@ -1499,8 +2354,8 @@ export default function App() {
                               className="h-full flex flex-col"
                             >
                               <div className="flex justify-between items-center mb-2">
-                                <h3 className="font-black italic flex items-center gap-2 text-sm"><Zap className="w-4 h-4" /> 选择技能</h3>
-                                <button onClick={() => setBattleMenuTab('MAIN')} className="text-[10px] font-bold text-slate-400 hover:text-slate-900 underline">返回</button>
+                                <h3 className="font-black italic flex items-center gap-2 text-sm"><Zap className="w-4 h-4" /> {t('selectMove')}</h3>
+                                <button onClick={() => setBattleMenuTab('MAIN')} className="text-[10px] font-bold text-slate-400 hover:text-slate-900 underline">{t('back')}</button>
                               </div>
                               <div className="grid grid-cols-2 grid-rows-2 gap-2 flex-1 min-h-0">
                                 {playerTeam[0].selectedMoves.map((move, idx) => (
@@ -1511,10 +2366,10 @@ export default function App() {
                                   >
                                     <div className="absolute top-0 right-0 w-12 h-full opacity-10 skew-x-[-20deg] bg-white translate-x-6 group-hover:translate-x-3 transition-transform"></div>
                                     <div className="relative z-10 w-full">
-                                      <div className="font-black text-sm italic tracking-tighter uppercase truncate">{move.zhName}</div>
+                                      <div className="font-black text-sm italic tracking-tighter uppercase truncate">{getLocalized(move)}</div>
                                       <div className="flex justify-between items-center mt-0.5">
                                         <TypeBadge type={move.type} size="xs" />
-                                        <span className="text-[8px] font-black opacity-60">威力: {move.power || '--'}</span>
+                                        <span className="text-[8px] font-black opacity-60">{t('power')}: {move.power || '--'}</span>
                                       </div>
                                     </div>
                                   </button>
@@ -1540,9 +2395,9 @@ export default function App() {
             >
               <div className="text-center mb-8 flex-none">
                 <div className="inline-block bg-yellow-400 px-12 py-3 skew-x-[-12deg] shadow-xl mb-4">
-                  <h2 className="text-4xl font-black italic tracking-tighter skew-x-[12deg] text-white">胜利！</h2>
+                  <h2 className="text-4xl font-black italic tracking-tighter skew-x-[12deg] text-white">{t('victory')}</h2>
                 </div>
-                <p className="text-slate-500 font-bold italic text-sm">选择一项奖励以继续你的冒险</p>
+                <p className="text-slate-500 font-bold italic text-sm">{t('chooseReward')}</p>
                 <button 
                   onClick={() => {
                     setInfoPokemonIdx(0);
@@ -1551,14 +2406,14 @@ export default function App() {
                   }}
                   className="mt-2 px-6 py-2 bg-slate-100 text-slate-500 font-black italic text-xs hover:bg-slate-200 transition-all skew-x-[-10deg]"
                 >
-                  <span className="skew-x-[10deg] inline-block flex items-center gap-2"><Dna className="w-4 h-4" /> 查看我的队伍</span>
+                  <span className="skew-x-[10deg] inline-block flex items-center gap-2"><Dna className="w-4 h-4" /> {t('viewTeam')}</span>
                 </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-8">
                 <div className="col-span-full flex items-center gap-4 mb-4">
                   <div className="h-px flex-1 bg-slate-200"></div>
-                  <h3 className="text-xs font-black italic text-slate-400 uppercase tracking-widest">随机奖励</h3>
+                  <h3 className="text-xs font-black italic text-slate-400 uppercase tracking-widest">{t('randomRewards')}</h3>
                   <div className="h-px flex-1 bg-slate-200"></div>
                 </div>
                 {rewards.map((reward, i) => (
@@ -1573,18 +2428,18 @@ export default function App() {
                         <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-8 group-hover:scale-110 transition-transform">
                           <Package className="w-12 h-12 text-blue-500" />
                         </div>
-                        <h3 className="text-2xl font-black italic mb-2">{reward.data.zhName}</h3>
-                        <p className="text-sm text-slate-400 font-medium">{reward.data.zhDescription}</p>
-                        <div className="mt-4 text-[10px] font-bold text-blue-500 uppercase tracking-widest">获得道具</div>
+                        <h3 className="text-2xl font-black italic mb-2">{getLocalized(reward.data)}</h3>
+                        <p className="text-sm text-slate-400 font-medium">{getLocalizedDesc(reward.data)}</p>
+                        <div className="mt-4 text-[10px] font-bold text-blue-500 uppercase tracking-widest">{t('getItem')}</div>
                       </>
                     ) : reward.type === 'MOVE' ? (
                       <>
                         <div className="w-24 h-24 bg-yellow-50 rounded-full flex items-center justify-center mx-auto mb-8 group-hover:scale-110 transition-transform">
                           <Zap className="w-12 h-12 text-yellow-500" />
                         </div>
-                        <h3 className="text-2xl font-black italic mb-2">学习新技能</h3>
-                        <p className="text-sm text-slate-400 font-medium">让队伍中的一只宝可梦学习一个新技能</p>
-                        <div className="mt-4 text-[10px] font-bold text-yellow-500 uppercase tracking-widest">特殊奖励</div>
+                        <h3 className="text-2xl font-black italic mb-2">{t('learnMove')}</h3>
+                        <p className="text-sm text-slate-400 font-medium">{t('learnMoveDesc')}</p>
+                        <div className="mt-4 text-[10px] font-bold text-yellow-500 uppercase tracking-widest">{t('specialReward')}</div>
                       </>
                     ) : (
                       <>
@@ -1596,8 +2451,8 @@ export default function App() {
                             referrerPolicy="no-referrer"
                           />
                         </div>
-                        <h3 className="text-2xl font-black italic mb-1 uppercase">{reward.data.zhName}</h3>
-                        <div className="text-xs text-emerald-500 font-black mb-4 uppercase tracking-widest italic">加入队伍</div>
+                        <h3 className="text-2xl font-black italic mb-1 uppercase">{getLocalized(reward.data)}</h3>
+                        <div className="text-xs text-emerald-500 font-black mb-4 uppercase tracking-widest italic">{t('joinTeam')}</div>
                         <div className="flex justify-center gap-2 mb-6">
                           {reward.data.types.map((t: any) => (
                             <TypeBadge key={t.type.name} type={t.type.name} size="sm" />
@@ -1606,7 +2461,7 @@ export default function App() {
                       </>
                     )}
                     <div className="mt-8 py-3 px-6 bg-slate-900 text-white font-black italic skew-x-[-10deg] group-hover:bg-blue-600 transition-colors">
-                      <span className="skew-x-[10deg] inline-block">选择此项</span>
+                      <span className="skew-x-[10deg] inline-block">{t('selectThis')}</span>
                     </div>
                   </button>
                 ))}
@@ -1617,7 +2472,7 @@ export default function App() {
                   <div className="h-px flex-1 bg-slate-200"></div>
                   <h3 className="text-sm font-black italic text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3">
                     <Sparkles className="w-5 h-5 text-yellow-500" />
-                    神秘商店 (使用金币购买)
+                    {t('mysteryShop')}
                     <Sparkles className="w-5 h-5 text-yellow-500" />
                   </h3>
                   <div className="h-px flex-1 bg-slate-200"></div>
@@ -1632,8 +2487,8 @@ export default function App() {
                     <div className="w-24 h-24 bg-yellow-50 rounded-full flex items-center justify-center mx-auto mb-8 group-hover:scale-110 transition-transform">
                       <Package className="w-12 h-12 text-yellow-500" />
                     </div>
-                    <h3 className="text-2xl font-black italic mb-2">{item.item.zhName}</h3>
-                    <p className="text-sm text-slate-400 font-medium">{item.item.zhDescription}</p>
+                    <h3 className="text-2xl font-black italic mb-2">{getLocalized(item.item)}</h3>
+                    <p className="text-sm text-slate-400 font-medium">{getLocalizedDesc(item.item)}</p>
                     <div className="mt-6 flex items-center justify-center gap-2">
                       <div className="bg-yellow-400 text-white px-4 py-1 skew-x-[-10deg] font-black italic flex items-center gap-2">
                         <Sparkles className="w-4 h-4 skew-x-[10deg]" />
@@ -1641,7 +2496,7 @@ export default function App() {
                       </div>
                     </div>
                     <div className="mt-8 py-3 px-6 bg-slate-900 text-white font-black italic skew-x-[-10deg] group-hover:bg-yellow-500 transition-colors">
-                      <span className="skew-x-[10deg] inline-block">{coins < item.price ? '金币不足' : '购买道具'}</span>
+                      <span className="skew-x-[10deg] inline-block">{coins < item.price ? t('insufficientCoins') : t('buyItem')}</span>
                     </div>
                   </button>
                 ))}
@@ -1658,8 +2513,8 @@ export default function App() {
                   >
                     <div className="bg-white max-w-2xl w-full p-8 skew-x-[-2deg] shadow-2xl relative">
                       <div className="skew-x-[2deg]">
-                        <h2 className="text-3xl font-black italic mb-2 tracking-tighter">队伍已满！</h2>
-                        <p className="text-slate-500 mb-8 font-bold italic">选择一只宝可梦进行替换，以加入新的伙伴：<span className="text-blue-600 uppercase">{showReplaceUI.zhName}</span></p>
+                        <h2 className="text-3xl font-black italic mb-2 tracking-tighter">{t('teamFull')}</h2>
+                        <p className="text-slate-500 mb-8 font-bold italic">{t('replacePartner')}：<span className="text-blue-600 uppercase">{getLocalized(showReplaceUI)}</span></p>
                         
                         <div className="grid grid-cols-2 gap-4">
                           {playerTeam.map((p, idx) => (
@@ -1670,7 +2525,7 @@ export default function App() {
                             >
                               <img src={p.sprites.front_default} className="w-16 h-16 object-contain" referrerPolicy="no-referrer" />
                               <div>
-                                <div className="font-black text-lg uppercase group-hover:text-blue-600">{p.zhName}</div>
+                                <div className="font-black text-lg uppercase group-hover:text-blue-600">{getLocalized(p)}</div>
                                 <div className="text-xs font-bold text-slate-400">Lv.{p.level}</div>
                               </div>
                             </button>
@@ -1681,7 +2536,7 @@ export default function App() {
                           onClick={() => setShowReplaceUI(null)}
                           className="mt-8 w-full py-4 bg-slate-200 text-slate-600 font-black italic hover:bg-slate-300 transition-all"
                         >
-                          取消替换
+                          {t('cancelReplace')}
                         </button>
                       </div>
                     </div>
@@ -1700,9 +2555,9 @@ export default function App() {
             >
               <div className="text-center mb-8 flex-none">
                 <div className="inline-block bg-slate-900 px-12 py-3 skew-x-[-12deg] shadow-xl mb-4">
-                  <h2 className="text-4xl font-black italic tracking-tighter skew-x-[12deg] text-white">学习新技能</h2>
+                  <h2 className="text-4xl font-black italic tracking-tighter skew-x-[12deg] text-white">{t('learnMove')}</h2>
                 </div>
-                <p className="text-slate-500 font-bold italic text-sm">选择一只宝可梦来学习新的力量</p>
+                <p className="text-slate-500 font-bold italic text-sm">{t('selectToLearn')}</p>
               </div>
 
               {learningPokemonIdx === null ? (
@@ -1713,16 +2568,16 @@ export default function App() {
                       className="bg-white p-6 shadow-xl hover:shadow-2xl transition-all border-b-4 border-slate-100 hover:border-blue-500 group flex flex-col items-center"
                     >
                       <img src={p.sprites.front_default} className="w-24 h-24 mx-auto mb-4 group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
-                      <div className="font-black italic text-xl uppercase">{p.zhName}</div>
+                      <div className="font-black italic text-xl uppercase">{getLocalized(p)}</div>
                       <div className="text-[10px] font-bold text-slate-400 mt-2 mb-4">
-                        {p.selectedMoves.length}/4 技能
+                        {t('movesCount').replace('{count}', p.selectedMoves.length.toString())}
                       </div>
                       <div className="flex gap-2 w-full">
                         <button
                           onClick={() => startLearningMove(idx)}
                           className="flex-1 py-2 bg-blue-500 text-white font-black italic text-sm hover:bg-blue-600 transition-colors skew-x-[-10deg]"
                         >
-                          <span className="skew-x-[10deg] inline-block">学习技能</span>
+                          <span className="skew-x-[10deg] inline-block">{t('learnMoveBtn')}</span>
                         </button>
                         <button
                           onClick={() => {
@@ -1732,7 +2587,7 @@ export default function App() {
                           }}
                           className="px-3 py-2 bg-slate-900 text-white font-black italic text-sm hover:bg-slate-700 transition-colors skew-x-[-10deg]"
                         >
-                          <span className="skew-x-[10deg] inline-block">详情</span>
+                          <span className="skew-x-[10deg] inline-block">{t('info')}</span>
                         </button>
                       </div>
                     </div>
@@ -1741,16 +2596,16 @@ export default function App() {
               ) : loading ? (
                 <div className="flex flex-col items-center py-20">
                   <RefreshCw className="animate-spin w-12 h-12 text-blue-500 mb-4" />
-                  <p className="font-black italic text-slate-400">正在检索可学习的技能...</p>
+                  <p className="font-black italic text-slate-400">{t('retrievingMoves')}</p>
                 </div>
               ) : selectedNewMove ? (
                 <div className="max-w-2xl mx-auto">
                   <div className="bg-white p-8 shadow-2xl skew-x-[-2deg] border-l-8 border-red-500">
                     <div className="skew-x-[2deg]">
-                      <h3 className="text-3xl font-black italic mb-2 tracking-tighter">替换哪个技能？</h3>
+                      <h3 className="text-3xl font-black italic mb-2 tracking-tighter">{t('replaceWhichMove')}</h3>
                       <p className="text-slate-500 mb-8 font-bold italic">
-                        <span className="text-blue-600 uppercase">{playerTeam[learningPokemonIdx].zhName}</span> 已经学会了4个技能。
-                        请选择一个旧技能来替换为 <span className="text-red-500 uppercase">{selectedNewMove.zhName}</span>。
+                        <span className="text-blue-600 uppercase">{getLocalized(playerTeam[learningPokemonIdx])}</span> {t('alreadyKnows4').replace('{name}', '')}
+                        {t('selectOldToReplace').replace('{move}', getLocalized(selectedNewMove))}
                       </p>
                       
                       <div className="grid grid-cols-2 gap-4 relative">
@@ -1763,8 +2618,8 @@ export default function App() {
                             className="p-4 bg-slate-900 text-white hover:bg-red-600 transition-all text-left group relative overflow-hidden flex justify-between items-center cursor-help"
                           >
                             <div className="relative z-10">
-                              <div className="font-black text-lg italic uppercase">{m.zhName}</div>
-                              <div className="text-[10px] opacity-60">威力: {m.power} / PP: {m.pp}</div>
+                              <div className="font-black text-lg italic uppercase">{getLocalized(m)}</div>
+                              <div className="text-[10px] opacity-60">{t('power')}: {m.power} / PP: {m.pp}</div>
                             </div>
                             <TypeBadge type={m.type} size="xs" className="relative z-10" />
                           </button>
@@ -1780,10 +2635,10 @@ export default function App() {
                               className="absolute bottom-full left-0 right-0 mb-4 bg-slate-900 text-white p-4 shadow-2xl z-50 border-t-4 border-blue-500"
                             >
                               <div className="flex justify-between items-center mb-2">
-                                <div className="font-black italic text-lg">{hoveredMove.zhName}</div>
+                                <div className="font-black italic text-lg">{getLocalized(hoveredMove)}</div>
                                 <div className="text-[10px] px-2 py-0.5 bg-white text-slate-900 font-bold uppercase">{hoveredMove.damage_class === 'special' ? '特攻' : '物理'}</div>
                               </div>
-                              <p className="text-xs text-slate-300 leading-relaxed italic">{hoveredMove.zhDescription}</p>
+                              <p className="text-xs text-slate-300 leading-relaxed italic">{getLocalizedDesc(hoveredMove)}</p>
                             </motion.div>
                           )}
                         </AnimatePresence>
@@ -1802,7 +2657,7 @@ export default function App() {
                   <div className="flex items-center justify-center gap-4">
                     <img src={playerTeam[learningPokemonIdx].sprites.front_default} className="w-20 h-20" referrerPolicy="no-referrer" />
                     <div className="text-left">
-                      <div className="text-2xl font-black italic uppercase">{playerTeam[learningPokemonIdx].zhName}</div>
+                      <div className="text-2xl font-black italic uppercase">{getLocalized(playerTeam[learningPokemonIdx])}</div>
                       <div className="text-xs font-bold text-slate-400">正在学习新技能...</div>
                     </div>
                   </div>
@@ -1816,7 +2671,7 @@ export default function App() {
                         onMouseLeave={() => setHoveredMove(null)}
                         className="bg-white p-6 shadow-xl hover:shadow-2xl transition-all hover:-translate-y-1 text-left border-b-4 border-slate-100 hover:border-yellow-500 group cursor-help"
                       >
-                        <div className="font-black italic text-2xl mb-2 group-hover:text-yellow-600">{move.zhName}</div>
+                        <div className="font-black italic text-2xl mb-2 group-hover:text-yellow-600">{getLocalized(move)}</div>
                         <div className="flex justify-between items-center mb-4">
                           <TypeBadge type={move.type} size="xs" />
                           <span className="text-[10px] font-black text-slate-400">威力: {move.power || '--'} / PP: {move.pp || '--'}</span>
@@ -1837,16 +2692,16 @@ export default function App() {
                           className="absolute bottom-full left-0 right-0 mb-4 bg-slate-900 text-white p-6 shadow-2xl z-50 border-t-8 border-yellow-500"
                         >
                           <div className="flex justify-between items-center mb-4">
-                            <div className="font-black italic text-2xl">{hoveredMove.zhName}</div>
+                            <div className="font-black italic text-2xl">{getLocalized(hoveredMove)}</div>
                             <div className="flex gap-2">
                                <span className="text-xs px-3 py-1 bg-white text-slate-900 font-black italic uppercase">{hoveredMove.damage_class === 'special' ? '特攻' : '物理'}</span>
                                <TypeBadge type={hoveredMove.type} size="md" />
                             </div>
                           </div>
-                          <p className="text-sm text-slate-300 leading-relaxed italic mb-4">{hoveredMove.zhDescription}</p>
+                          <p className="text-sm text-slate-300 leading-relaxed italic mb-4">{getLocalizedDesc(hoveredMove)}</p>
                           <div className="flex gap-6 text-[10px] font-black italic text-slate-400 border-t border-slate-800 pt-4">
-                            <span>威力: {hoveredMove.power || '--'}</span>
-                            <span>命中: {hoveredMove.accuracy || '--'}</span>
+                            <span>{currentLanguage.startsWith('zh') ? '威力' : 'Power'}: {hoveredMove.power || '--'}</span>
+                            <span>{currentLanguage.startsWith('zh') ? '命中' : 'Accuracy'}: {hoveredMove.accuracy || '--'}</span>
                             <span>PP: {hoveredMove.pp || '--'}</span>
                           </div>
                         </motion.div>
@@ -1898,7 +2753,7 @@ export default function App() {
                         <div className="bg-slate-900 text-white px-4 py-1 skew-x-[-12deg] font-black italic text-xl">
                           <span className="skew-x-[12deg]">LV.{displayPokemon.level}</span>
                         </div>
-                        <h2 className="text-4xl font-black italic tracking-tighter uppercase">{displayPokemon.zhName}</h2>
+                        <h2 className="text-4xl font-black italic tracking-tighter uppercase">{getLocalized(displayPokemon)}</h2>
                       </div>
                       <div className="flex gap-3 mb-8">
                         {displayPokemon.types.map(t => (
@@ -1915,9 +2770,9 @@ export default function App() {
                         />
                       </div>
                       <div className="bg-white p-4 border-l-4 border-slate-900 shadow-sm">
-                        <div className="text-xs font-black text-slate-400 uppercase mb-1">特性</div>
+                        <div className="text-xs font-black text-slate-400 uppercase mb-1">{currentLanguage.startsWith('zh') ? '特性' : 'Ability'}</div>
                         <div className="font-black italic text-lg">
-                          {displayPokemon.abilities[0]?.ability.zhName || '无'}
+                          {getLocalized(displayPokemon.abilities[0]?.ability) || (currentLanguage.startsWith('zh') ? '无' : 'None')}
                         </div>
                       </div>
                     </div>
@@ -1927,32 +2782,33 @@ export default function App() {
                   <div className="p-8 bg-white">
                     <div className="mb-8">
                       <div className="flex justify-between items-end mb-6 border-b border-slate-100 pb-2">
-                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">能力值</h3>
+                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">{currentLanguage.startsWith('zh') ? '能力值' : 'Stats'}</h3>
                         <div className="text-[10px] font-bold text-blue-500 italic">
-                          {displayPokemon.nature.zhName} 性格 
-                          ({displayPokemon.nature.plus ? `+${displayPokemon.nature.plus === 'spAtk' ? '特攻' : displayPokemon.nature.plus === 'spDef' ? '特防' : displayPokemon.nature.plus === 'attack' ? '攻击' : displayPokemon.nature.plus === 'defense' ? '防御' : '速度'}` : ''}
-                          {displayPokemon.nature.minus ? `, -${displayPokemon.nature.minus === 'spAtk' ? '特攻' : displayPokemon.nature.minus === 'spDef' ? '特防' : displayPokemon.nature.minus === 'attack' ? '攻击' : displayPokemon.nature.minus === 'defense' ? '防御' : '速度'}` : ''})
+                          {getLocalizedNature(displayPokemon.nature)} {currentLanguage.startsWith('zh') ? '性格' : 'Nature'} 
+                          ({displayPokemon.nature.plus ? `+${getStatName(displayPokemon.nature.plus)}` : ''}
+                          {displayPokemon.nature.minus ? `, -${getStatName(displayPokemon.nature.minus)}` : ''})
                         </div>
                       </div>
                       <div className="space-y-3">
                         {[
-                          { key: 'hp', name: 'HP', color: 'bg-red-500' },
-                          { key: 'attack', name: '攻击', color: 'bg-orange-500' },
-                          { key: 'defense', name: '防御', color: 'bg-yellow-500' },
-                          { key: 'spAtk', name: '特攻', color: 'bg-blue-500' },
-                          { key: 'spDef', name: '特防', color: 'bg-green-500' },
-                          { key: 'speed', name: '速度', color: 'bg-pink-500' }
+                          { key: 'hp', color: 'bg-red-500' },
+                          { key: 'attack', color: 'bg-orange-500' },
+                          { key: 'defense', color: 'bg-yellow-500' },
+                          { key: 'spAtk', color: 'bg-blue-500' },
+                          { key: 'spDef', color: 'bg-green-500' },
+                          { key: 'speed', color: 'bg-pink-500' }
                         ].map((s, i) => {
                           const val = (displayPokemon.calculatedStats as any)[s.key];
                           const base = (displayPokemon.baseStats as any)[s.key];
                           const iv = (displayPokemon.ivs as any)[s.key];
                           const max = 400; 
+                          const statName = getStatName(s.key);
                           
                           return (
                             <div key={i} className="flex flex-col gap-1">
                               <div className="flex justify-between items-center text-[10px] font-bold italic">
-                                <div className="text-slate-500">{s.name}</div>
-                                <div className="text-slate-300">种族: {base} / 个体: {iv}</div>
+                                <div className="text-slate-500">{statName}</div>
+                                <div className="text-slate-300">{currentLanguage.startsWith('zh') ? '种族' : 'Base'}: {base} / {currentLanguage.startsWith('zh') ? '个体' : 'IV'}: {iv}</div>
                               </div>
                               <div className="flex items-center gap-4">
                                 <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -1971,7 +2827,7 @@ export default function App() {
                     </div>
 
                     <div className="relative">
-                      <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 border-b border-slate-100 pb-2">当前技能</h3>
+                      <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 border-b border-slate-100 pb-2">{currentLanguage.startsWith('zh') ? '当前技能' : 'Current Moves'}</h3>
                       <div className="grid grid-cols-1 gap-3">
                         {displayPokemon.selectedMoves.map((m, i) => (
                           <div 
@@ -1981,8 +2837,12 @@ export default function App() {
                             className="flex items-center justify-between p-3 bg-slate-50 border-l-4 border-slate-900 group hover:bg-slate-100 transition-colors cursor-help"
                           >
                             <div>
-                              <div className="font-black italic uppercase">{m.zhName}</div>
-                              <div className="text-[10px] text-slate-400 font-bold italic">威力: {m.power || '--'} / 命中: {m.accuracy || '--'} / PP: {m.pp || '--'}</div>
+                              <div className="font-black italic uppercase">{getLocalized(m)}</div>
+                              <div className="text-[10px] text-slate-400 font-bold italic">
+                                {currentLanguage.startsWith('zh') ? '威力' : 'Power'}: {m.power || '--'} / 
+                                {currentLanguage.startsWith('zh') ? '命中' : 'Accuracy'}: {m.accuracy || '--'} / 
+                                PP: {m.pp || '--'}
+                              </div>
                             </div>
                             <TypeBadge type={m.type} size="xs" />
                           </div>
@@ -1999,10 +2859,10 @@ export default function App() {
                             className="absolute bottom-full left-0 right-0 mb-4 bg-slate-900 text-white p-4 shadow-2xl z-50 border-t-4 border-blue-500"
                           >
                             <div className="flex justify-between items-center mb-2">
-                              <div className="font-black italic text-lg">{hoveredMove.zhName}</div>
+                              <div className="font-black italic text-lg">{getLocalized(hoveredMove)}</div>
                               <div className="text-[10px] px-2 py-0.5 bg-white text-slate-900 font-bold uppercase">{hoveredMove.damage_class === 'special' ? '特攻' : '物理'}</div>
                             </div>
-                            <p className="text-xs text-slate-300 leading-relaxed italic">{hoveredMove.zhDescription}</p>
+                            <p className="text-xs text-slate-300 leading-relaxed italic">{getLocalizedDesc(hoveredMove)}</p>
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -2048,32 +2908,6 @@ export default function App() {
           )}
         </AnimatePresence>
       </div>
-
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
-        
-        body {
-          background-color: #f0f0f0;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: #f1f1f1;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #0f172a;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #1e293b;
-        }
-
-        /* 模拟剑盾风格的斜角和粗体字 */
-        h1, h2, h3, button {
-          font-family: 'Inter', sans-serif;
-        }
-      `}</style>
     </div>
   );
 }

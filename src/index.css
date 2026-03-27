@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -11,4 +12,26 @@
       background-position: 100px 100px;
     }
   }
+}
+
+body {
+  background-color: #f0f0f0;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #0f172a;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #1e293b;
+}
+
+/* 模拟剑盾风格的斜角和粗体字 */
+h1, h2, h3, button {
+  font-family: 'Inter', sans-serif;
 }
