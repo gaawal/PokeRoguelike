@@ -1,0 +1,86 @@
+export interface Pokemon {
+  id: number;
+  name: string;
+  zhName?: string;
+  sprites: {
+    front_default: string;
+    back_default: string;
+  };
+  stats: {
+    base_stat: number;
+    stat: {
+      name: string;
+    };
+  }[];
+  types: {
+    type: {
+      name: string;
+    };
+  }[];
+  abilities: {
+    ability: {
+      name: string;
+      zhName?: string;
+    };
+  }[];
+  moves: {
+    move: {
+      name: string;
+      url: string;
+    };
+  }[];
+}
+
+export interface Move {
+  name: string;
+  zhName?: string;
+  power: number | null;
+  accuracy: number | null;
+  type: string;
+  damage_class: string;
+  pp?: number;
+  zhDescription?: string;
+}
+
+export interface Nature {
+  name: string;
+  zhName: string;
+  plus: string;
+  minus: string;
+}
+
+export interface Stats {
+  hp: number;
+  attack: number;
+  defense: number;
+  spAtk: number;
+  spDef: number;
+  speed: number;
+}
+
+export interface GamePokemon extends Pokemon {
+  currentHp: number;
+  maxHp: number;
+  selectedMoves: Move[];
+  level: number;
+  nature: Nature;
+  ivs: Stats;
+  baseStats: Stats;
+  calculatedStats: Stats;
+  isGym?: boolean;
+}
+
+export interface Item {
+  id: string;
+  name: string;
+  zhName: string;
+  description: string;
+  zhDescription: string;
+  effect: (pokemon: GamePokemon) => GamePokemon;
+  isBattleItem?: boolean;
+  isBall?: boolean;
+  catchRate?: number;
+}
+
+export type GameState = 'START' | 'MENU' | 'BATTLE' | 'REWARD' | 'LEARN_MOVE' | 'POKEMON_INFO' | 'GAMEOVER' | 'STARTER_SELECT';
+export type BattleMenuTab = 'MAIN' | 'MOVES' | 'POKEMON' | 'BAG';

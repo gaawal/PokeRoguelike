@@ -1,0 +1,5 @@
+{
+  "name": "PokeRoguelike: Random Battle",
+  "description": "A roguelike Pokemon battle game with random encounters, team building, and item upgrades using PokeAPI.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --animate-barber-pole: barber-pole 10s linear infinite;
+
+  @keyframes barber-pole {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: 100px 100px;
+    }
+  }
+}
