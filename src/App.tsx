@@ -31,10 +31,13 @@ import {
   Gem,
   Ghost,
   Moon,
-  Circle
+  Circle,
+  ShoppingCart,
+  ArrowRight,
+  Coins
 } from 'lucide-react';
-import { getProcessedPokemon, getRandomPokemonId, getLearnableMoves } from './services/pokeApi';
-import { GamePokemon, GameState, Item, Move, BattleMenuTab, SUPPORTED_LANGUAGES, Nature, StatStages } from './types';
+import { getProcessedPokemon, getRandomPokemonId, getLearnableMoves, fetchEvolutionChain, fetchPokemon } from './services/pokeApi';
+import { GamePokemon, GameState, Item, Move, BattleMenuTab, SUPPORTED_LANGUAGES, Nature, StatStages, Weather, Pokemon } from './types';
 import { TYPE_CHART, TYPE_ZH, GENERATIONS } from './constants';
 
 // 属性颜色映射
@@ -316,15 +319,9 @@ export default function App() {
   const [coins, setCoins] = useState(0);
   const [shopItems, setShopItems] = useState<{item: Item, price: number}[]>([]);
   const [rewardChoiceMade, setRewardChoiceMade] = useState(false);
+  const [rerollCount, setRerollCount] = useState(0);
   const [playerTeam, setPlayerTeam] = useState<GamePokemon[]>([]);
-  const [inventory, setInventory] = useState<Item[]>([]);
-  const [enemy, setEnemy] = useState<GamePokemon | null>(null);
-  const [stage, setStage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [battleLog, setBattleLog] = useState<string[]>([]);
-  const [turn, setTurn] = useState<'PLAYER' | 'ENEMY'>('PLAYER');
-  const [battleMenuTab, setBattleMenuTab] = useState<BattleMenuTab>('MAIN');
-  const [rewards, setRewards] = useState<{ type: 'ITEM' | 'POKEMON' | 'MOVE', data: any }[]>([]);
+  const [rewards, setRewards] = useState<{ type: 'ITEM' | 'POKEMON' | 'MOVE' | 'EVOLUTION' | 'SHOP_ITEM', data: any }[]>([]);
   const [activeBuffs, setActiveBuffs] = useState<{ atk: boolean, def: boolean }>({ atk: false, def: false });
   const [enemyBuffs, setEnemyBuffs] = useState<{ atk: boolean, def: boolean }>({ atk: false, def: false });
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -342,6 +339,22 @@ export default function App() {
   const [prevGameState, setPrevGameState] = useState<GameState>('START');
   const [showLogHistory, setShowLogHistory] = useState(false);
   const [currentLanguage, setCurrentLanguage] = useState('zh-hans');
+  const [pendingRewardAction, setPendingRewardAction] = useState<'MOVE' | 'EVOLUTION' | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [inventory, setInventory] = useState<Item[]>([]);
+  const [stage, setStage] = useState(1);
+  const [enemy, setEnemy] = useState<GamePokemon | null>(null);
+  const [battleLog, setBattleLog] = useState<string[]>([]);
+  const [turn, setTurn] = useState<'PLAYER' | 'ENEMY'>('PLAYER');
+  const [battleMenuTab, setBattleMenuTab] = useState<BattleMenuTab>('MAIN');
+
+  const [weather, setWeather] = useState<Weather>('none');
+  const [weatherTurns, setWeatherTurns] = useState(0);
+  const [evolutionTarget, setEvolutionTarget] = useState<GamePokemon | null>(null);
+  const [isEvolving, setIsEvolving] = useState(false);
+  const [evolvedPokemon, setEvolvedPokemon] = useState<GamePokemon | null>(null);
+  const [evolutionChoices, setEvolutionChoices] = useState<Pokemon[]>([]);
+  const [selectedPokemonForEvolution, setSelectedPokemonForEvolution] = useState<{pokemon: GamePokemon, index: number} | null>(null);
 
   const uiStrings: Record<string, Record<string, string>> = {
     'zh-hans': {
@@ -357,6 +370,8 @@ export default function App() {
       getItem: '获得道具',
       learnMove: '学习新技能',
       learnMoveDesc: '让队伍中的一只宝可梦学习一个新技能',
+      evolutionReward: '宝可梦进化',
+      evolutionRewardDesc: '让队伍中的一只宝可梦进化到下一阶段',
       specialReward: '特殊奖励',
       joinTeam: '加入队伍',
       selectThis: '选择此项',
@@ -442,13 +457,34 @@ export default function App() {
       myTeam: '我的队伍',
       bagEmpty: '背包空空如也',
       backToMoves: '返回选择技能',
+      evolution: '进化',
+      evolveSuccess: '{name} 进化成了 {target}！',
+      cannotEvolve: '这只宝可梦目前无法进化。',
+      selectToEvolve: '选择一只宝可梦进行进化',
+      chooseEvolution: '选择进化形态',
+      evolve: '进化',
+      shop: '商店',
+      price: '价格',
       learningNewMove: '正在学习新技能...',
       learnThisMove: '学习此技能',
       noMoreMoves: '这只宝可梦暂时没有更多可学习的技能了。',
       reselectPokemon: '重新选择宝可梦',
       challengeEnd: '挑战结束',
       fellAtStage: '你在第 {stage} 关倒下了',
-      restart: '重新开始'
+      restart: '重新开始',
+      weather_none: '天气：无',
+      weather_sunny: '天气：大晴天',
+      weather_rainy: '天气：下雨',
+      weather_sandstorm: '天气：沙暴',
+      weather_hail: '天气：冰雹',
+      weather_sunny_effect: '阳光增强了火属性技能，削弱了水属性技能。',
+      weather_rainy_effect: '降雨增强了水属性技能，削弱了火属性技能。',
+      weather_sandstorm_effect: '沙暴正在肆虐！岩石、地面和钢属性以外的宝可梦会受到伤害。',
+      weather_hail_effect: '冰雹正在降下！冰属性以外的宝可梦会受到伤害。',
+      reroll: '重新选择',
+      rerollCost: '消耗 {cost} 金币',
+      reachedFloor: '你在第 {stage} 关倒下了',
+      gameOver: '挑战结束'
     },
     'zh-hant': {
       stage: '關卡',
@@ -463,6 +499,8 @@ export default function App() {
       getItem: '獲得道具',
       learnMove: '學習新技能',
       learnMoveDesc: '讓隊伍中的一隻寶可夢學習一個新技能',
+      evolutionReward: '寶可夢進化',
+      evolutionRewardDesc: '讓隊伍中的一隻寶可夢進化到下一階段',
       specialReward: '特殊獎勵',
       joinTeam: '加入隊伍',
       selectThis: '選擇此項',
@@ -548,13 +586,34 @@ export default function App() {
       myTeam: '我的隊伍',
       bagEmpty: '背包空空如也',
       backToMoves: '返回選擇技能',
+      evolution: '進化',
+      evolveSuccess: '{name} 進化成了 {target}！',
+      cannotEvolve: '這隻寶可夢目前無法進化。',
+      selectToEvolve: '選擇一隻寶可夢進行進化',
+      chooseEvolution: '選擇進化形態',
+      evolve: '進化',
+      shop: '商店',
+      price: '價格',
       learningNewMove: '正在學習新技能...',
       learnThisMove: '學習此技能',
       noMoreMoves: '這隻寶可夢暫時沒有更多可學習的技能了。',
       reselectPokemon: '重新選擇寶可夢',
       challengeEnd: '挑戰結束',
       fellAtStage: '你在第 {stage} 關倒下了',
-      restart: '重新開始'
+      restart: '重新開始',
+      weather_none: '天氣：無',
+      weather_sunny: '天氣：大晴天',
+      weather_rainy: '天氣：下雨',
+      weather_sandstorm: '天氣：沙暴',
+      weather_hail: '天氣：冰雹',
+      weather_sunny_effect: '陽光增強了火屬性技能，削弱了水屬性技能。',
+      weather_rainy_effect: '降雨增強了水屬性技能，削弱了火屬性技能。',
+      weather_sandstorm_effect: '沙暴正在肆虐！岩石、地面和鋼屬性以外的寶可夢會受到傷害。',
+      weather_hail_effect: '冰雹正在降下！冰屬性以外的寶可夢會受到傷害。',
+      reroll: '重新選擇',
+      rerollCost: '消耗 {cost} 點金幣',
+      reachedFloor: '你在第 {stage} 關倒下了',
+      gameOver: '挑戰結束'
     },
     'en': {
       stage: 'Stage',
@@ -569,6 +628,8 @@ export default function App() {
       getItem: 'Get Item',
       learnMove: 'Learn New Move',
       learnMoveDesc: 'Let a Pokemon in your team learn a new move',
+      evolutionReward: 'Pokemon Evolution',
+      evolutionRewardDesc: 'Let a Pokemon in your team evolve to the next stage',
       specialReward: 'Special Reward',
       joinTeam: 'Join Team',
       selectThis: 'Select This',
@@ -654,19 +715,46 @@ export default function App() {
       myTeam: 'My Team',
       bagEmpty: 'Bag is empty',
       backToMoves: 'Back to Moves',
+      evolution: 'Evolution',
+      evolveSuccess: '{name} evolved into {target}!',
+      cannotEvolve: 'This Pokemon cannot evolve at this time.',
+      selectToEvolve: 'Select a Pokemon to evolve',
+      chooseEvolution: 'Choose Evolution Form',
+      evolve: 'Evolve',
+      shop: 'Shop',
+      price: 'Price',
       learningNewMove: 'Learning new move...',
       learnThisMove: 'Learn this move',
       noMoreMoves: 'This Pokemon has no more learnable moves for now.',
       reselectPokemon: 'Reselect Pokemon',
       challengeEnd: 'Challenge Ended',
       fellAtStage: 'You fell at Stage {stage}',
-      restart: 'Restart'
+      restart: 'Restart',
+      weather_none: 'Weather: None',
+      weather_sunny: 'Weather: Sunny',
+      weather_rainy: 'Weather: Rainy',
+      weather_sandstorm: 'Weather: Sandstorm',
+      weather_hail: 'Weather: Hail',
+      weather_sunny_effect: 'The sunlight is strong! Fire moves are boosted, Water moves are weakened.',
+      weather_rainy_effect: 'It is raining! Water moves are boosted, Fire moves are weakened.',
+      weather_sandstorm_effect: 'A sandstorm is raging! Non-Rock/Ground/Steel Pokemon take damage.',
+      weather_hail_effect: 'Hail is falling! Non-Ice Pokemon take damage.',
+      reroll: 'Reroll',
+      rerollCost: 'Cost {cost} Coins',
+      reachedFloor: 'You reached floor {stage}',
+      gameOver: 'GAME OVER'
     }
   };
 
-  const t = useCallback((key: string) => {
+  const t = useCallback((key: string, params?: Record<string, string | number>) => {
     const lang = currentLanguage.startsWith('zh') ? currentLanguage : (uiStrings[currentLanguage] ? currentLanguage : 'en');
-    return uiStrings[lang]?.[key] || uiStrings['en']?.[key] || key;
+    let str = uiStrings[lang]?.[key] || uiStrings['en']?.[key] || key;
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        str = str.replace(`{${k}}`, String(v));
+      });
+    }
+    return str;
   }, [currentLanguage]);
   const [showLangMenu, setShowLangMenu] = useState(false);
 
@@ -1024,6 +1112,22 @@ export default function App() {
       await addMessagesSequentially([`${getLocalized(player)} 受到了反作用力伤害！`]);
     }
 
+    // 5. 天气伤害
+    if (weather === 'sandstorm' || weather === 'hail') {
+      const isRockGroundSteel = (p: GamePokemon) => p.types.some(t => ['rock', 'ground', 'steel'].includes(t.type.name));
+      const isIce = (p: GamePokemon) => p.types.some(t => t.type.name === 'ice');
+      
+      if (weather === 'sandstorm' && !isRockGroundSteel(updatedEnemy) && newEnemyHp > 0) {
+        const weatherDmg = Math.floor(updatedEnemy.maxHp / 16);
+        updatedEnemy.currentHp = Math.max(0, updatedEnemy.currentHp - weatherDmg);
+        await addMessagesSequentially([t('weatherDamage').replace('{name}', getLocalized(updatedEnemy))]);
+      } else if (weather === 'hail' && !isIce(updatedEnemy) && newEnemyHp > 0) {
+        const weatherDmg = Math.floor(updatedEnemy.maxHp / 16);
+        updatedEnemy.currentHp = Math.max(0, updatedEnemy.currentHp - weatherDmg);
+        await addMessagesSequentially([t('weatherDamage').replace('{name}', getLocalized(updatedEnemy))]);
+      }
+    }
+
     setEnemy(updatedEnemy);
     setPlayerAnim('idle');
     setActiveMoveType(null);
@@ -1208,6 +1312,22 @@ export default function App() {
       await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 受到了反作用力伤害！`]);
     }
 
+    // 5. 天气伤害
+    if (weather === 'sandstorm' || weather === 'hail') {
+      const isRockGroundSteel = (p: GamePokemon) => p.types.some(t => ['rock', 'ground', 'steel'].includes(t.type.name));
+      const isIce = (p: GamePokemon) => p.types.some(t => t.type.name === 'ice');
+      
+      if (weather === 'sandstorm' && !isRockGroundSteel(updatedPlayer) && newPlayerHp > 0) {
+        const weatherDmg = Math.floor(updatedPlayer.maxHp / 16);
+        updatedPlayer.currentHp = Math.max(0, updatedPlayer.currentHp - weatherDmg);
+        await addMessagesSequentially([t('weatherDamage').replace('{name}', getLocalized(updatedPlayer))]);
+      } else if (weather === 'hail' && !isIce(updatedPlayer) && newPlayerHp > 0) {
+        const weatherDmg = Math.floor(updatedPlayer.maxHp / 16);
+        updatedPlayer.currentHp = Math.max(0, updatedPlayer.currentHp - weatherDmg);
+        await addMessagesSequentially([t('weatherDamage').replace('{name}', getLocalized(updatedPlayer))]);
+      }
+    }
+
     updatedTeam[0] = updatedPlayer;
     setPlayerTeam(updatedTeam);
     setEnemyAnim('idle');
@@ -1374,7 +1494,7 @@ export default function App() {
       // 速度减半在先手判断中处理，这里不影响伤害
     }
 
-    // 计算属性克制
+    // 属性克制
     let multiplier = 1;
     defender.types.forEach(t => {
       const typeMult = TYPE_CHART[move.type]?.[t.type.name];
@@ -1382,6 +1502,15 @@ export default function App() {
         multiplier *= typeMult;
       }
     });
+
+    // 天气影响
+    if (weather === 'sunny') {
+      if (move.type === 'fire') multiplier *= 1.5;
+      if (move.type === 'water') multiplier *= 0.5;
+    } else if (weather === 'rainy') {
+      if (move.type === 'water') multiplier *= 1.5;
+      if (move.type === 'fire') multiplier *= 0.5;
+    }
 
     // 命中判断
     const accStage = attacker.statStages.accuracy;
@@ -1411,46 +1540,96 @@ export default function App() {
     return { damage, multiplier, isMiss: false, isCrit };
   };
 
+  const generateRewardSet = async () => {
+    const newRewards = [];
+    const usedPokemonIds = new Set();
+    const usedItems = new Set();
+
+    // 3 Free Rewards (Adventure Rewards)
+    // Increase POKEMON probability slightly to allow multiple choices more often
+    const freeTypes: ('ITEM' | 'POKEMON' | 'MOVE' | 'EVOLUTION')[] = ['ITEM', 'POKEMON', 'POKEMON', 'MOVE', 'EVOLUTION'];
+    
+    for (let i = 0; i < 3; i++) {
+      let type = freeTypes[Math.floor(Math.random() * freeTypes.length)];
+      
+      if (type === 'ITEM') {
+        let item;
+        let attempts = 0;
+        do {
+          item = ALL_ITEMS[Math.floor(Math.random() * ALL_ITEMS.length)];
+          attempts++;
+        } while (usedItems.has(item.id) && attempts < 10);
+        usedItems.add(item.id);
+        newRewards.push({ type, data: item });
+      } else if (type === 'POKEMON') {
+        let pokeId;
+        let attempts = 0;
+        do {
+          pokeId = await getRandomPokemonId(selectedGens);
+          attempts++;
+        } while (usedPokemonIds.has(pokeId) && attempts < 10);
+        usedPokemonIds.add(pokeId);
+        const newPoke = await getProcessedPokemon(pokeId, startLevel);
+        newRewards.push({ type, data: newPoke });
+      } else if (type === 'MOVE') {
+        newRewards.push({ type, data: null });
+      } else if (type === 'EVOLUTION') {
+        newRewards.push({ type, data: null });
+      }
+    }
+    
+    // 3 Shop Items (Mystery Shop)
+    for (let i = 0; i < 3; i++) {
+      let item;
+      let attempts = 0;
+      do {
+        item = ALL_ITEMS[Math.floor(Math.random() * ALL_ITEMS.length)];
+        attempts++;
+      } while (usedItems.has(item.id) && attempts < 10);
+      usedItems.add(item.id);
+      
+      newRewards.push({ 
+        type: 'SHOP_ITEM', 
+        data: { 
+          item, 
+          price: 50 + Math.floor(Math.random() * 151) 
+        } 
+      });
+    }
+    return newRewards;
+  };
+
+  const rerollRewards = async () => {
+    const cost = 50 + rerollCount * 50; // Increasing cost: 50, 100, 150...
+    if (coins < cost) return;
+    
+    setLoading(true);
+    try {
+      setCoins(prev => prev - cost);
+      setRerollCount(prev => prev + 1);
+      const newRewards = await generateRewardSet();
+      setRewards(newRewards);
+      setRewardChoiceMade(false); // Allow picking a new free reward
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const winBattle = async (isCatch = false) => {
     setLoading(true);
     try {
       const isGym = stage % 5 === 0;
-      // 获得金币
-      let earnedCoins = 100 + Math.floor(Math.random() * 201); // 100-300
-      if (isGym) earnedCoins *= 3; // 道馆战3倍金币
+      let earnedCoins = 100 + Math.floor(Math.random() * 201);
+      if (isGym) earnedCoins *= 3;
       
       setCoins(prev => prev + earnedCoins);
+      setRerollCount(0);
 
-      const newRewards = [];
-      
-      // 随机道具
-      const item1 = ALL_ITEMS[Math.floor(Math.random() * ALL_ITEMS.length)];
-      newRewards.push({ type: 'ITEM' as const, data: item1 });
-      
-      // 随机宝可梦或技能
-      if (Math.random() > 0.4) {
-        const pokeId = await getRandomPokemonId(selectedGens);
-        const newPoke = await getProcessedPokemon(pokeId, startLevel); // 奖励宝可梦也保持初始等级
-        newRewards.push({ type: 'POKEMON' as const, data: newPoke });
-      } else {
-        newRewards.push({ type: 'MOVE' as const, data: null });
-      }
+      const newRewards = await generateRewardSet();
 
-      const item2 = ALL_ITEMS[Math.floor(Math.random() * ALL_ITEMS.length)];
-      newRewards.push({ type: 'ITEM' as const, data: item2 });
-
-      // 生成商店物品
-      const newShopItems = [];
-      for (let i = 0; i < 3; i++) {
-        const randomItem = ALL_ITEMS[Math.floor(Math.random() * ALL_ITEMS.length)];
-        newShopItems.push({
-          item: randomItem,
-          price: 50 + Math.floor(Math.random() * 151) // 50-200
-        });
-      }
-      setShopItems(newShopItems);
       setRewardChoiceMade(false);
-
       setRewards(newRewards);
       setGameState('REWARD');
       
@@ -1466,33 +1645,95 @@ export default function App() {
   };
 
   const selectReward = (reward: any) => {
-    if (rewardChoiceMade) return;
-    setRewardChoiceMade(true);
+    if (reward.type === 'SHOP_ITEM') {
+      if (coins < reward.data.price) return;
+      setCoins(prev => prev - reward.data.price);
+      setInventory(prev => [...prev, reward.data.item]);
+      // Remove this item from the rewards list so it can't be bought again
+      setRewards(prev => prev.filter(r => r !== reward));
+      return;
+    }
 
+    if (rewardChoiceMade) return;
+    
     if (reward.type === 'ITEM') {
+      setRewardChoiceMade(true);
       setInventory(prev => [...prev, reward.data]);
-      nextStage();
     } else if (reward.type === 'POKEMON') {
       if (playerTeam.length < 6) {
+        setRewardChoiceMade(true);
         setPlayerTeam(prev => [...prev, reward.data]);
-        nextStage();
       } else {
         setShowReplaceUI(reward.data);
       }
     } else if (reward.type === 'MOVE') {
-      setGameState('LEARN_MOVE');
+      setRewardChoiceMade(true);
+      setPendingRewardAction('MOVE');
       setLearningPokemonIdx(null);
       setPotentialMoves([]);
       setSelectedNewMove(null);
+    } else if (reward.type === 'EVOLUTION') {
+      setRewardChoiceMade(true);
+      setPendingRewardAction('EVOLUTION');
+      setSelectedPokemonForEvolution(null);
+      setEvolutionChoices([]);
     }
   };
 
-  const buyFromShop = (shopItem: {item: Item, price: number}) => {
-    if (rewardChoiceMade || coins < shopItem.price) return;
-    setRewardChoiceMade(true);
-    setCoins(prev => prev - shopItem.price);
-    setInventory(prev => [...prev, shopItem.item]);
-    nextStage();
+  const startEvolution = async (pokemon: GamePokemon, index: number) => {
+    setLoading(true);
+    try {
+      const nextEvolutionIds = await fetchEvolutionChain(pokemon.id);
+      if (nextEvolutionIds.length === 0) {
+        await addMessagesSequentially([t('cannotEvolve')]);
+        return;
+      }
+      
+      // Fetch full data for each choice
+      const choices = await Promise.all(nextEvolutionIds.map(id => fetchPokemon(id)));
+      
+      setSelectedPokemonForEvolution({ pokemon, index });
+      setEvolutionChoices(choices);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const performEvolution = async (evolvedId: number) => {
+    if (!selectedPokemonForEvolution) return;
+    const { pokemon, index } = selectedPokemonForEvolution;
+    setLoading(true);
+    try {
+      const evolved = await getProcessedPokemon(evolvedId, pokemon.level);
+      
+      // Keep current HP percentage
+      const hpPercent = pokemon.currentHp / pokemon.maxHp;
+      evolved.currentHp = Math.floor(evolved.maxHp * hpPercent);
+      
+      setEvolutionTarget(pokemon);
+      setEvolvedPokemon(evolved);
+      setIsEvolving(true);
+      
+      // Animation sequence
+      setTimeout(() => {
+        setPlayerTeam(prev => {
+          const newTeam = [...prev];
+          newTeam[index] = evolved;
+          return newTeam;
+        });
+        setTimeout(() => {
+          setIsEvolving(false);
+          finishReward();
+        }, 3000);
+      }, 4000);
+      
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const nextStage = () => {
@@ -1545,14 +1786,13 @@ export default function App() {
   };
 
   const finishReward = () => {
-    healAllPokemon();
-    setGameState('BATTLE');
-    setStage(prev => prev + 1);
+    setGameState('REWARD');
+    setPendingRewardAction(null);
     setLearningPokemonIdx(null);
     setPotentialMoves([]);
     setSelectedNewMove(null);
-    startBattleTransition();
-    spawnEnemy(stage + 1);
+    setSelectedPokemonForEvolution(null);
+    setEvolutionChoices([]);
   };
 
   const replacePokemon = (index: number) => {
@@ -1561,9 +1801,7 @@ export default function App() {
     newTeam[index] = showReplaceUI;
     setPlayerTeam(newTeam);
     setShowReplaceUI(null);
-    if (rewardChoiceMade) {
-      nextStage();
-    }
+    setRewardChoiceMade(true);
   };
 
   if (loading && gameState === 'START') {
@@ -1583,7 +1821,7 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen bg-[#f0f0f0] text-slate-900 font-sans overflow-hidden select-none">
+    <div className="h-[100dvh] bg-[#f0f0f0] text-slate-900 font-sans overflow-hidden select-none">
       {/* 剑盾风格背景装饰 */}
       <div className="fixed inset-0 pointer-events-none opacity-10">
         <div className="absolute top-0 left-0 w-full h-full bg-[linear-gradient(45deg,#00a0e9_25%,transparent_25%,transparent_50%,#00a0e9_50%,#00a0e9_75%,transparent_75%,transparent)] bg-[length:100px_100px] animate-barber-pole"></div>
@@ -1677,70 +1915,72 @@ export default function App() {
               key="starter-select"
               initial={{ opacity: 0, y: 50 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex-1 flex flex-col py-4 overflow-y-auto custom-scrollbar"
+              className="flex-1 flex flex-col py-4 overflow-hidden"
             >
-              <div className="text-center mb-8 flex-none">
-                <div className="inline-block bg-slate-900 px-12 py-3 skew-x-[-12deg] shadow-xl mb-4">
-                  <h2 className="text-4xl font-black italic tracking-tighter skew-x-[12deg] text-white">{t('chooseStarter')}</h2>
+              <div className="text-center mb-4 md:mb-8 flex-none px-4">
+                <div className="inline-block bg-slate-900 px-6 md:px-12 py-2 md:py-3 skew-x-[-12deg] shadow-xl mb-2 md:mb-4">
+                  <h2 className="text-2xl md:text-4xl font-black italic tracking-tighter skew-x-[12deg] text-white uppercase">{t('chooseStarter')}</h2>
                 </div>
-                <p className="text-slate-500 font-bold italic text-sm">{t('chooseStarterDesc')}</p>
+                <p className="text-slate-500 font-bold italic text-xs md:text-sm">{t('chooseStarterDesc')}</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-8 max-w-5xl mx-auto w-full">
-                {starterOptions.map((p, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-white p-8 shadow-2xl hover:shadow-blue-200 transition-all border-b-8 border-slate-100 hover:border-blue-500 group flex flex-col items-center relative"
-                  >
-                    <div className="absolute top-4 right-4 bg-slate-100 px-2 py-1 text-[10px] font-black italic">
-                      Lv.{p.level}
-                    </div>
-                    <div className="relative mb-6 group-hover:scale-110 transition-transform duration-500">
-                      <div className="absolute inset-0 bg-blue-50 rounded-full scale-110 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      <img 
-                        src={p.sprites.front_default} 
-                        alt={getLocalized(p)} 
-                        className="w-40 h-40 object-contain relative z-10 drop-shadow-xl"
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-                    <h3 className="text-3xl font-black italic mb-2 uppercase tracking-tighter">{getLocalized(p)}</h3>
-                    <div className="flex gap-1 mb-6">
-                      {p.types.map((t: any) => (
-                        <TypeBadge key={t.type.name} type={t.type.name} size="sm" className="skew-x-[-10deg]" />
-                      ))}
-                    </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8 max-w-5xl mx-auto w-full">
+                  {starterOptions.map((p, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-white p-4 md:p-8 shadow-xl hover:shadow-blue-200 transition-all border-b-4 md:border-b-8 border-slate-100 hover:border-blue-500 group flex flex-col items-center relative"
+                    >
+                      <div className="absolute top-2 right-2 md:top-4 md:right-4 bg-slate-100 px-2 py-1 text-[8px] md:text-[10px] font-black italic">
+                        Lv.{p.level}
+                      </div>
+                      <div className="relative mb-4 md:mb-6 group-hover:scale-110 transition-transform duration-500">
+                        <div className="absolute inset-0 bg-blue-50 rounded-full scale-110 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <img 
+                          src={p.sprites.front_default} 
+                          alt={getLocalized(p)} 
+                          className="w-32 h-32 md:w-40 md:h-40 object-contain relative z-10 drop-shadow-xl"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <h3 className="text-2xl md:text-3xl font-black italic mb-1 md:mb-2 uppercase tracking-tighter truncate w-full text-center">{getLocalized(p)}</h3>
+                      <div className="flex gap-1 mb-4 md:mb-6">
+                        {p.types.map((t: any) => (
+                          <TypeBadge key={t.type.name} type={t.type.name} size="xs" className="skew-x-[-10deg]" />
+                        ))}
+                      </div>
 
-                    <div className="w-full space-y-2 mb-8">
-                      <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">{t('startingMoves')}</div>
-                      {p.selectedMoves.map((m, mi) => (
-                        <div key={mi} className="flex justify-between items-center bg-slate-50 p-2 text-xs font-bold italic border-l-4 border-slate-200">
-                          <span>{getLocalized(m)}</span>
-                          <TypeBadge type={m.type} size="xs" />
-                        </div>
-                      ))}
-                    </div>
+                      <div className="w-full space-y-1 md:space-y-2 mb-6 md:mb-8">
+                        <div className="text-[8px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 md:mb-2">{t('startingMoves')}</div>
+                        {p.selectedMoves.map((m, mi) => (
+                          <div key={mi} className="flex justify-between items-center bg-slate-50 p-1.5 md:p-2 text-[10px] md:text-xs font-bold italic border-l-4 border-slate-200">
+                            <span className="truncate pr-2">{getLocalized(m)}</span>
+                            <TypeBadge type={m.type} size="xs" />
+                          </div>
+                        ))}
+                      </div>
 
-                    <div className="flex gap-2 w-full mt-auto">
-                      <button
-                        onClick={() => {
-                          setInfoPokemonIdx(idx);
-                          setPrevGameState('STARTER_SELECT');
-                          setGameState('POKEMON_INFO');
-                        }}
-                        className="flex-1 py-3 bg-slate-100 text-slate-600 font-black italic hover:bg-slate-200 transition-all text-sm"
-                      >
-                        {t('viewDetails')}
-                      </button>
-                      <button
-                        onClick={() => selectStarter(idx)}
-                        className="flex-[2] py-3 bg-slate-900 text-white font-black italic hover:bg-blue-600 transition-all text-sm shadow-lg"
-                      >
-                        {t('iChooseYou')}
-                      </button>
+                      <div className="flex gap-2 w-full mt-auto">
+                        <button
+                          onClick={() => {
+                            setInfoPokemonIdx(idx);
+                            setPrevGameState('STARTER_SELECT');
+                            setGameState('POKEMON_INFO');
+                          }}
+                          className="flex-1 py-2 md:py-3 bg-slate-100 text-slate-600 font-black italic hover:bg-slate-200 transition-all text-[10px] md:text-sm"
+                        >
+                          {t('viewDetails')}
+                        </button>
+                        <button
+                          onClick={() => selectStarter(idx)}
+                          className="flex-[2] py-2 md:py-3 bg-slate-900 text-white font-black italic hover:bg-blue-600 transition-all text-[10px] md:text-sm shadow-lg"
+                        >
+                          {t('iChooseYou')}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </motion.div>
           )}
@@ -1834,16 +2074,16 @@ export default function App() {
                       <Sword className="w-8 h-8" />
                     </div>
                   </div>
-                  <h2 className="text-6xl font-black mb-6 tracking-tighter italic text-slate-900 uppercase">Poke Roguelike</h2>
-                  <p className="text-slate-500 max-w-md mb-12 text-lg font-medium italic">
-                    随机对战之旅：在无尽的挑战中生存
+                  <h2 className="text-4xl sm:text-6xl font-black mb-6 tracking-tighter italic text-slate-900 uppercase">Poke Roguelike</h2>
+                  <p className="text-slate-500 max-w-md mb-12 text-base sm:text-lg font-medium italic px-4">
+                    随机对战之旅：在无尽化挑战中生存
                   </p>
                   <button 
                     onClick={() => setStartStep(1)}
-                    className="group relative px-16 py-6 bg-slate-900 text-white rounded-none skew-x-[-12deg] font-black text-3xl transition-all hover:bg-blue-600 hover:scale-105 active:scale-95 shadow-[12px_12px_0px_#00000022]"
+                    className="group relative px-10 sm:px-16 py-4 sm:py-6 bg-slate-900 text-white rounded-none skew-x-[-12deg] font-black text-xl sm:text-3xl transition-all hover:bg-blue-600 hover:scale-105 active:scale-95 shadow-[12px_12px_0px_#00000022]"
                   >
                     <span className="flex items-center gap-3 skew-x-[12deg]">
-                      开始对战 <ChevronRight className="w-10 h-10" />
+                      开始对战 <ChevronRight className="w-8 h-8 sm:w-10 sm:h-10" />
                     </span>
                   </button>
                 </motion.div>
@@ -1864,13 +2104,13 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="bg-white p-10 shadow-2xl border-b-8 border-slate-900 mb-12">
+                  <div className="bg-white p-6 md:p-10 shadow-2xl border-b-8 border-slate-900 mb-6 md:mb-12">
                     {startStep === 1 && (
                       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        <h3 className="text-2xl font-black italic mb-8 uppercase tracking-tighter flex items-center gap-3">
-                          <Dna className="w-6 h-6 text-blue-500" /> 选择你的冒险地区
+                        <h3 className="text-xl md:text-2xl font-black italic mb-6 md:mb-8 uppercase tracking-tighter flex items-center gap-3">
+                          <Dna className="w-5 h-5 md:w-6 md:h-6 text-blue-500" /> 选择你的冒险地区
                         </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
                           {GENERATIONS.map((gen) => (
                             <button
                               key={gen.id}
@@ -1881,19 +2121,19 @@ export default function App() {
                                     : [...prev, gen.id]
                                 );
                               }}
-                              className={`p-4 border-4 skew-x-[-4deg] transition-all relative overflow-hidden group ${
+                              className={`p-3 md:p-4 border-2 md:border-4 skew-x-[-4deg] transition-all relative overflow-hidden group ${
                                 selectedGens.includes(gen.id)
                                   ? 'bg-slate-900 text-white border-slate-900 shadow-xl scale-105'
                                   : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'
                               }`}
                             >
                               <div className="skew-x-[4deg] relative z-10">
-                                <div className="font-black text-lg italic">{gen.name}</div>
-                                <div className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{gen.region}</div>
+                                <div className="font-black text-base md:text-lg italic">{gen.name}</div>
+                                <div className="text-[8px] md:text-[10px] font-bold opacity-60 uppercase tracking-widest">{gen.region}</div>
                               </div>
                               {selectedGens.includes(gen.id) && (
-                                <div className="absolute top-0 right-0 w-8 h-8 bg-blue-500 flex items-center justify-center skew-x-[4deg] -translate-y-2 translate-x-2">
-                                  <Sparkles className="w-3 h-3 text-white" />
+                                <div className="absolute top-0 right-0 w-6 h-6 md:w-8 md:h-8 bg-blue-500 flex items-center justify-center skew-x-[4deg] -translate-y-1 md:-translate-y-2 translate-x-1 md:translate-x-2">
+                                  <Sparkles className="w-2 h-2 md:w-3 md:h-3 text-white" />
                                 </div>
                               )}
                             </button>
@@ -1901,7 +2141,7 @@ export default function App() {
                         </div>
                         <button 
                           onClick={() => setStartStep(2)}
-                          className="mt-12 w-full py-5 bg-blue-600 text-white font-black text-xl italic skew-x-[-10deg] hover:bg-blue-700 transition-all shadow-lg"
+                          className="mt-8 md:mt-12 w-full py-4 md:py-5 bg-blue-600 text-white font-black text-lg md:text-xl italic skew-x-[-10deg] hover:bg-blue-700 transition-all shadow-lg"
                         >
                           <span className="skew-x-[10deg] inline-block">下一步：选择等级</span>
                         </button>
@@ -1910,22 +2150,22 @@ export default function App() {
 
                     {startStep === 2 && (
                       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        <h3 className="text-2xl font-black italic mb-8 uppercase tracking-tighter flex items-center gap-3">
-                          <Zap className="w-6 h-6 text-yellow-500" /> 设定初始挑战难度
+                        <h3 className="text-xl md:text-2xl font-black italic mb-6 md:mb-8 uppercase tracking-tighter flex items-center gap-3">
+                          <Zap className="w-5 h-5 md:w-6 md:h-6 text-yellow-500" /> 设定初始挑战难度
                         </h3>
-                        <div className="flex flex-col sm:flex-row justify-center gap-6">
+                        <div className="flex flex-col sm:flex-row justify-center gap-4 md:gap-6">
                           {[30, 50].map((lv) => (
                             <button
                               key={lv}
                               onClick={() => setStartLevel(lv)}
-                              className={`flex-1 py-8 px-10 text-4xl font-black italic transition-all skew-x-[-10deg] border-4 ${
+                              className={`flex-1 py-6 md:py-8 px-8 md:px-10 text-3xl md:text-4xl font-black italic transition-all skew-x-[-10deg] border-2 md:border-4 ${
                                 startLevel === lv
                                   ? 'bg-yellow-400 text-white border-yellow-400 shadow-2xl scale-105'
                                   : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'
                               }`}
                             >
                               <div className="skew-x-[10deg]">
-                                <div className="text-sm uppercase opacity-60 mb-2">Level</div>
+                                <div className="text-[10px] md:text-sm uppercase opacity-60 mb-1 md:mb-2">Level</div>
                                 <div>{lv}</div>
                               </div>
                             </button>
@@ -1934,10 +2174,10 @@ export default function App() {
                         <button 
                           onClick={startGame}
                           disabled={loading}
-                          className="mt-12 w-full py-6 bg-slate-900 text-white font-black text-2xl italic skew-x-[-10deg] hover:bg-red-600 transition-all shadow-xl disabled:opacity-50"
+                          className="mt-8 md:mt-12 w-full py-5 md:py-6 bg-slate-900 text-white font-black text-xl md:text-2xl italic skew-x-[-10deg] hover:bg-red-600 transition-all shadow-xl disabled:opacity-50"
                         >
                           <span className="skew-x-[10deg] inline-block flex items-center justify-center gap-3">
-                            {loading ? <RefreshCw className="animate-spin w-6 h-6" /> : '开启冒险之旅'}
+                            {loading ? <RefreshCw className="animate-spin w-5 h-5 md:w-6 md:h-6" /> : '开启冒险之旅'}
                           </span>
                         </button>
                       </motion.div>
@@ -1956,38 +2196,37 @@ export default function App() {
               className="flex-1 flex flex-col gap-4 min-h-0"
             >
               {/* 战斗场景 */}
-              <div className="relative flex-[72] bg-white rounded-none skew-x-[-1deg] shadow-2xl overflow-hidden border-y-8 border-slate-900 min-h-0">
+              <div className="relative flex-[6] bg-white rounded-none skew-x-[-1deg] shadow-2xl overflow-hidden border-y-8 border-slate-900 min-h-0">
                 <div className="absolute inset-0 bg-[linear-gradient(to_bottom,#e0e0e0,#ffffff)]"></div>
                 <div className="absolute bottom-0 left-0 w-full h-1/3 bg-slate-100 skew-y-[-2deg] origin-left"></div>
                 
                 {/* 敌人 */}
-                <div className="absolute top-8 right-12 flex flex-col items-end">
-                  <div className="bg-white p-3 shadow-lg border-r-8 border-red-500 w-72 skew-x-[-10deg] mb-4">
-                    <div className="skew-x-[10deg] flex flex-col gap-1">
+                <div className="absolute top-4 sm:top-8 right-4 sm:right-12 flex flex-col items-end">
+                  <div className="bg-white p-2 sm:p-3 shadow-lg border-r-8 border-red-500 w-48 sm:w-72 skew-x-[-10deg] mb-2 sm:mb-4">
+                    <div className="skew-x-[10deg] flex flex-col gap-0.5 sm:gap-1">
                       <div className="flex justify-between items-end">
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-xl italic uppercase">{getLocalized(enemy)}</span>
+                        <div className="flex items-center gap-1 sm:gap-2">
+                          <span className="font-black text-sm sm:text-xl italic uppercase truncate max-w-[80px] sm:max-w-none">{getLocalized(enemy)}</span>
                           {enemy.status && (
-                            <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 font-black uppercase tracking-tighter">
+                            <span className="bg-slate-900 text-white text-[6px] sm:text-[8px] px-1 py-0.5 font-black uppercase tracking-tighter">
                               {AILMENT_ZH[enemy.status] || enemy.status}
                             </span>
                           )}
                         </div>
-                        <span className="text-xs font-bold bg-slate-900 text-white px-2 py-0.5">Lv.{enemy.level}</span>
+                        <span className="text-[8px] sm:text-xs font-bold bg-slate-900 text-white px-1.5 sm:px-2 py-0.5">Lv.{enemy.level}</span>
                       </div>
-                      <div className="flex gap-1 mb-1">
+                      <div className="flex gap-1 mb-0.5 sm:mb-1">
                         {enemy.types.map(t => (
                           <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
                         ))}
                       </div>
-                      <div className="h-2 bg-slate-200 rounded-none relative overflow-hidden border border-slate-300">
+                      <div className="h-1.5 sm:h-2 bg-slate-200 rounded-none relative overflow-hidden border border-slate-300">
                         <motion.div 
                           animate={{ width: `${(enemy.currentHp / enemy.maxHp) * 100}%` }}
                           className={`h-full transition-colors ${enemy.currentHp / enemy.maxHp < 0.2 ? 'bg-red-500' : enemy.currentHp / enemy.maxHp < 0.5 ? 'bg-yellow-500' : 'bg-emerald-500'}`}
                         />
                       </div>
-                      {/* 隐藏具体数值 */}
-                      <div className="text-right text-[10px] font-black italic text-slate-300">
+                      <div className="text-right text-[8px] sm:text-[10px] font-black italic text-slate-300">
                         ??? / ???
                       </div>
                     </div>
@@ -1996,45 +2235,45 @@ export default function App() {
                     animate={isCatching ? { scale: 0, opacity: 0 } : enemyAnim === 'attack' ? { x: -40, scale: 1, opacity: 1 } : enemyAnim === 'hit' ? { x: [0, 10, -10, 10, 0], opacity: [1, 0.5, 1], scale: 1 } : { y: [0, -5, 0], scale: 1, opacity: 1 }}
                     transition={isCatching ? { duration: 0.5 } : enemyAnim === 'idle' ? { y: { repeat: Infinity, duration: 2 }, scale: { duration: 0.3 }, opacity: { duration: 0.3 } } : { duration: 0.3 }}
                     src={enemy.sprites.front_default} 
-                    className="w-48 h-48 object-contain drop-shadow-2xl"
+                    className="w-32 h-32 sm:w-48 sm:h-48 object-contain drop-shadow-2xl"
                     referrerPolicy="no-referrer"
                   />
                 </div>
 
                 {/* 玩家 */}
-                <div className="absolute bottom-4 left-12 flex flex-col items-start">
+                <div className="absolute bottom-2 sm:bottom-4 left-4 sm:left-12 flex flex-col items-start">
                   <motion.img 
                     animate={playerAnim === 'attack' ? { x: 40 } : playerAnim === 'hit' ? { x: [0, -10, 10, -10, 0], opacity: [1, 0.5, 1] } : { y: [0, 5, 0] }}
                     transition={playerAnim === 'idle' ? { repeat: Infinity, duration: 2 } : { duration: 0.3 }}
                     src={playerTeam[0].sprites.back_default || playerTeam[0].sprites.front_default} 
-                    className="w-64 h-64 object-contain drop-shadow-2xl"
+                    className="w-40 h-40 sm:w-64 sm:h-64 object-contain drop-shadow-2xl"
                     referrerPolicy="no-referrer"
                   />
-                  <div className="bg-white p-3 shadow-lg border-l-8 border-blue-500 w-72 skew-x-[-10deg] mt-[-40px] relative z-20">
-                    <div className="skew-x-[10deg] flex flex-col gap-1">
+                  <div className="bg-white p-2 sm:p-3 shadow-lg border-l-8 border-blue-500 w-48 sm:w-72 skew-x-[-10deg] mt-[-20px] sm:mt-[-40px] relative z-20">
+                    <div className="skew-x-[10deg] flex flex-col gap-0.5 sm:gap-1">
                       <div className="flex justify-between items-end">
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-xl italic uppercase">{getLocalized(playerTeam[0])}</span>
+                        <div className="flex items-center gap-1 sm:gap-2">
+                          <span className="font-black text-sm sm:text-xl italic uppercase truncate max-w-[80px] sm:max-w-none">{getLocalized(playerTeam[0])}</span>
                           {playerTeam[0].status && (
-                            <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 font-black uppercase tracking-tighter">
+                            <span className="bg-slate-900 text-white text-[6px] sm:text-[8px] px-1 py-0.5 font-black uppercase tracking-tighter">
                               {AILMENT_ZH[playerTeam[0].status] || playerTeam[0].status}
                             </span>
                           )}
                         </div>
-                        <span className="text-xs font-bold bg-slate-900 text-white px-2 py-0.5">Lv.{playerTeam[0].level}</span>
+                        <span className="text-[8px] sm:text-xs font-bold bg-slate-900 text-white px-1.5 sm:px-2 py-0.5">Lv.{playerTeam[0].level}</span>
                       </div>
-                      <div className="flex gap-1 mb-1">
+                      <div className="flex gap-1 mb-0.5 sm:mb-1">
                         {playerTeam[0].types.map(t => (
                           <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
                         ))}
                       </div>
-                      <div className="h-2 bg-slate-200 rounded-none relative overflow-hidden border border-slate-300">
+                      <div className="h-1.5 sm:h-2 bg-slate-200 rounded-none relative overflow-hidden border border-slate-300">
                         <motion.div 
                           animate={{ width: `${(playerTeam[0].currentHp / playerTeam[0].maxHp) * 100}%` }}
                           className={`h-full transition-colors ${playerTeam[0].currentHp / playerTeam[0].maxHp < 0.2 ? 'bg-red-500' : playerTeam[0].currentHp / playerTeam[0].maxHp < 0.5 ? 'bg-yellow-500' : 'bg-blue-500'}`}
                         />
                       </div>
-                      <div className="text-right text-[10px] font-black italic">
+                      <div className="text-right text-[8px] sm:text-[10px] font-black italic">
                         {playerTeam[0].currentHp} / {playerTeam[0].maxHp}
                       </div>
                     </div>
@@ -2046,8 +2285,8 @@ export default function App() {
                   {(playerAnim === 'attack' || enemyAnim === 'attack') && activeMoveType && (
                     <motion.div 
                       initial={{ opacity: 0, scale: 0.5, rotate: -45 }}
-                      animate={{ opacity: 1, scale: 2, rotate: 0 }}
-                      exit={{ opacity: 0, scale: 3 }}
+                      animate={{ opacity: 1, scale: 1.5, rotate: 0 }}
+                      exit={{ opacity: 0, scale: 2 }}
                       className="absolute inset-0 flex items-center justify-center pointer-events-none z-50"
                     >
                       {(() => {
@@ -2061,7 +2300,7 @@ export default function App() {
                               style={{ backgroundColor: TYPE_COLORS[activeMoveType] }}
                             />
                             <Icon 
-                              className="w-32 h-32 relative z-10 drop-shadow-[0_0_15px_rgba(255,255,255,0.8)]" 
+                              className="w-20 h-20 sm:w-32 h-32 relative z-10 drop-shadow-[0_0_15px_rgba(255,255,255,0.8)]" 
                               style={{ color: TYPE_COLORS[activeMoveType] }} 
                             />
                           </div>
@@ -2084,7 +2323,7 @@ export default function App() {
                         rotate: 0,
                       }}
                       exit={{ opacity: 0, scale: 1.2 }}
-                      className="absolute top-48 right-24 z-50 flex flex-col items-center"
+                      className="absolute top-32 sm:top-48 right-12 sm:right-24 z-50 flex flex-col items-center"
                     >
                       {/* 精灵球本体 */}
                       {!(catchSuccess === false && battleLog[battleLog.length-1]?.includes('挣脱')) && (
@@ -2098,11 +2337,11 @@ export default function App() {
                             duration: 0.5,
                             repeatDelay: 1
                           }}
-                          className="relative w-24 h-24 rounded-full border-4 border-slate-900 overflow-hidden bg-white shadow-2xl"
+                          className="relative w-16 h-16 sm:w-24 sm:h-24 rounded-full border-4 border-slate-900 overflow-hidden bg-white shadow-2xl"
                         >
                           <div className="absolute top-0 left-0 w-full h-1/2 bg-red-500 border-b-4 border-slate-900"></div>
-                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white border-4 border-slate-900 z-10">
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-slate-200"></div>
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-white border-4 border-slate-900 z-10">
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-slate-200"></div>
                           </div>
                           {/* 成功捕获的高光 */}
                           {catchSuccess === true && (
@@ -2124,14 +2363,14 @@ export default function App() {
                               initial={{ scale: 0, x: 0, y: 0 }}
                               animate={{ 
                                 scale: [0, 1, 0], 
-                                x: Math.cos(i * Math.PI / 4) * 80, 
-                                y: Math.sin(i * Math.PI / 4) * 80,
+                                x: Math.cos(i * Math.PI / 4) * 60, 
+                                y: Math.sin(i * Math.PI / 4) * 60,
                                 rotate: 360
                               }}
                               transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.1 }}
                               className="absolute"
                             >
-                              <Sparkles className="w-5 h-5 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.8)]" />
+                              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.8)]" />
                             </motion.div>
                           ))}
                         </div>
@@ -2146,15 +2385,15 @@ export default function App() {
                               initial={{ scale: 0, x: 0, y: 0 }}
                               animate={{ 
                                 scale: [0, 1.5, 0], 
-                                x: (Math.random() - 0.5) * 300, 
-                                y: (Math.random() - 0.5) * 300 
+                                x: (Math.random() - 0.5) * 200, 
+                                y: (Math.random() - 0.5) * 200 
                               }}
                               transition={{ 
                                 duration: 0.8, 
                                 ease: "easeOut", 
                                 delay: i * 0.01 
                               }}
-                              className="absolute w-6 h-6 rounded-full bg-blue-200/40 border border-white/50 shadow-sm backdrop-blur-[2px]"
+                              className="absolute w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-blue-200/40 border border-white/50 shadow-sm backdrop-blur-[2px]"
                             />
                           ))}
                         </div>
@@ -2165,7 +2404,7 @@ export default function App() {
               </div>
 
               {/* 统一操作与消息区域 */}
-              <div className="relative h-[30%] flex-none bg-white shadow-2xl border-8 border-slate-900 overflow-hidden">
+              <div className="relative flex-[4] bg-white shadow-2xl border-4 sm:border-8 border-slate-900 overflow-hidden">
                 <AnimatePresence mode="wait">
                   {(isMessageProcessing || turn === 'ENEMY') ? (
                     <motion.div 
@@ -2173,10 +2412,10 @@ export default function App() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="absolute inset-0 bg-slate-900 text-white p-6 flex items-center relative overflow-hidden"
+                      className="absolute inset-0 bg-slate-900 text-white p-4 sm:p-6 flex items-center relative overflow-hidden"
                     >
-                      <div className="absolute top-0 left-0 w-full h-2 bg-blue-500"></div>
-                      <div className="absolute bottom-0 left-0 w-full h-2 bg-red-500"></div>
+                      <div className="absolute top-0 left-0 w-full h-1 sm:h-2 bg-blue-500"></div>
+                      <div className="absolute bottom-0 left-0 w-full h-1 sm:h-2 bg-red-500"></div>
                       <AnimatePresence mode="wait">
                         {battleLog.length > 0 && (
                           <motion.div
@@ -2186,7 +2425,7 @@ export default function App() {
                             exit={{ opacity: 0, y: -10 }}
                             className="w-full"
                           >
-                            <p className="text-2xl font-black italic tracking-tight leading-tight">
+                            <p className="text-lg sm:text-2xl font-black italic tracking-tight leading-tight">
                               {turn === 'ENEMY' && !isMessageProcessing ? '对手正在思考...' : battleLog[battleLog.length - 1]}
                             </p>
                           </motion.div>
@@ -2195,9 +2434,9 @@ export default function App() {
                       <motion.div 
                         animate={{ x: [0, 5, 0] }}
                         transition={{ repeat: Infinity, duration: 0.8 }}
-                        className="absolute bottom-4 right-8"
+                        className="absolute bottom-2 sm:bottom-4 right-4 sm:right-8"
                       >
-                        <ChevronRight className="w-8 h-8 text-blue-400" />
+                        <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400" />
                       </motion.div>
                     </motion.div>
                   ) : (
@@ -2206,22 +2445,22 @@ export default function App() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="absolute inset-0 bg-white grid grid-cols-1 lg:grid-cols-4 gap-0"
+                      className="absolute inset-0 bg-white grid grid-cols-1 md:grid-cols-4 gap-0 overflow-y-auto custom-scrollbar"
                     >
                       {/* 消息提示区 (左侧) */}
-                      <div className="lg:col-span-2 p-6 border-r-4 border-slate-900 flex flex-col justify-center bg-slate-50">
-                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">指令阶段</div>
-                        <div className="text-3xl font-black italic tracking-tighter text-slate-900">
+                      <div className="md:col-span-2 p-4 sm:p-6 border-b-4 md:border-b-0 md:border-r-4 border-slate-900 flex flex-col justify-center bg-slate-50">
+                        <div className="text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">指令阶段</div>
+                        <div className="text-xl sm:text-3xl font-black italic tracking-tighter text-slate-900">
                           该怎么办呢？
                         </div>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {activeBuffs.atk && <span className="bg-red-500 text-white text-[8px] px-2 py-0.5 font-black skew-x-[-10deg]"><span className="skew-x-[10deg] inline-block">攻击↑</span></span>}
-                          {activeBuffs.def && <span className="bg-blue-500 text-white text-[8px] px-2 py-0.5 font-black skew-x-[-10deg]"><span className="skew-x-[10deg] inline-block">防御↑</span></span>}
+                        <div className="mt-2 sm:mt-4 flex flex-wrap gap-2">
+                          {activeBuffs.atk && <span className="bg-red-500 text-white text-[6px] sm:text-[8px] px-2 py-0.5 font-black skew-x-[-10deg]"><span className="skew-x-[10deg] inline-block">攻击↑</span></span>}
+                          {activeBuffs.def && <span className="bg-blue-500 text-white text-[6px] sm:text-[8px] px-2 py-0.5 font-black skew-x-[-10deg]"><span className="skew-x-[10deg] inline-block">防御↑</span></span>}
                         </div>
                       </div>
 
                       {/* 操作按钮区 (右侧) */}
-                      <div className="lg:col-span-2 p-3 bg-white relative">
+                      <div className="md:col-span-2 p-2 sm:p-3 bg-white relative">
                         <AnimatePresence mode="wait">
                           {turn === 'PLAYER' && battleMenuTab === 'MAIN' && (
                             <motion.div 
@@ -2229,35 +2468,35 @@ export default function App() {
                               initial={{ opacity: 0, scale: 0.98 }}
                               animate={{ opacity: 1, scale: 1 }}
                               exit={{ opacity: 0, scale: 0.98 }}
-                              className="grid grid-cols-2 gap-3 h-full"
+                              className="grid grid-cols-2 gap-2 sm:gap-3 h-full"
                             >
                               <button 
                                 onClick={() => setBattleMenuTab('MOVES')}
-                                className="group relative bg-red-500 text-white p-3 font-black italic text-xl skew-x-[-10deg] hover:bg-red-600 transition-all overflow-hidden"
+                                className="group relative bg-red-500 text-white p-2 sm:p-3 font-black italic text-base sm:text-xl skew-x-[-10deg] hover:bg-red-600 transition-all overflow-hidden"
                               >
                                 <div className="absolute inset-0 bg-white/10 translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                                <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><Sword className="w-5 h-5" /> 战斗</span>
+                                <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><Sword className="w-4 h-4 sm:w-5 sm:h-5" /> 战斗</span>
                               </button>
                               <button 
                                 onClick={() => setBattleMenuTab('BAG')}
-                                className="group relative bg-yellow-500 text-white p-3 font-black italic text-xl skew-x-[-10deg] hover:bg-yellow-600 transition-all overflow-hidden"
+                                className="group relative bg-yellow-500 text-white p-2 sm:p-3 font-black italic text-base sm:text-xl skew-x-[-10deg] hover:bg-yellow-600 transition-all overflow-hidden"
                               >
                                 <div className="absolute inset-0 bg-white/10 translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                                <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><Package className="w-5 h-5" /> 背包</span>
+                                <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><Package className="w-4 h-4 sm:w-5 sm:h-5" /> 背包</span>
                               </button>
                               <button 
                                 onClick={() => setBattleMenuTab('POKEMON')}
-                                className="group relative bg-emerald-500 text-white p-3 font-black italic text-xl skew-x-[-10deg] hover:bg-emerald-600 transition-all overflow-hidden"
+                                className="group relative bg-emerald-500 text-white p-2 sm:p-3 font-black italic text-base sm:text-xl skew-x-[-10deg] hover:bg-emerald-600 transition-all overflow-hidden"
                               >
                                 <div className="absolute inset-0 bg-white/10 translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                                <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><Dna className="w-5 h-5" /> 宝可梦</span>
+                                <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><Dna className="w-4 h-4 sm:w-5 sm:h-5" /> 宝可梦</span>
                               </button>
                               <button 
                                 onClick={() => setGameState('GAMEOVER')}
-                                className="group relative bg-slate-500 text-white p-3 font-black italic text-xl skew-x-[-10deg] hover:bg-slate-600 transition-all overflow-hidden"
+                                className="group relative bg-slate-500 text-white p-2 sm:p-3 font-black italic text-base sm:text-xl skew-x-[-10deg] hover:bg-slate-600 transition-all overflow-hidden"
                               >
                                 <div className="absolute inset-0 bg-white/10 translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                                <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><RefreshCw className="w-5 h-5" /> 逃跑</span>
+                                <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" /> 逃跑</span>
                               </button>
                             </motion.div>
                           )}
@@ -2389,118 +2628,373 @@ export default function App() {
           {gameState === 'REWARD' && (
             <motion.div 
               key="reward"
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex-1 flex flex-col py-4 overflow-y-auto custom-scrollbar"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex-1 flex flex-col p-4 overflow-hidden relative"
             >
-              <div className="text-center mb-8 flex-none">
-                <div className="inline-block bg-yellow-400 px-12 py-3 skew-x-[-12deg] shadow-xl mb-4">
-                  <h2 className="text-4xl font-black italic tracking-tighter skew-x-[12deg] text-white">{t('victory')}</h2>
+              <div className="flex justify-between items-center mb-6 px-4 flex-none">
+                <div className="flex items-center gap-4">
+                  <div className="bg-yellow-400 px-6 py-2 skew-x-[-12deg] shadow-lg">
+                    <h2 className="text-2xl font-black italic tracking-tighter skew-x-[12deg] text-white uppercase">{t('victory')}</h2>
+                  </div>
+                  <div className="bg-slate-900 px-4 py-2 skew-x-[-10deg] shadow-md flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-yellow-400 skew-x-[10deg]" />
+                    <span className="text-white font-black italic text-sm skew-x-[10deg]">{coins}</span>
+                  </div>
                 </div>
-                <p className="text-slate-500 font-bold italic text-sm">{t('chooseReward')}</p>
-                <button 
-                  onClick={() => {
-                    setInfoPokemonIdx(0);
-                    setPrevGameState(gameState);
-                    setGameState('POKEMON_INFO');
-                  }}
-                  className="mt-2 px-6 py-2 bg-slate-100 text-slate-500 font-black italic text-xs hover:bg-slate-200 transition-all skew-x-[-10deg]"
-                >
-                  <span className="skew-x-[10deg] inline-block flex items-center gap-2"><Dna className="w-4 h-4" /> {t('viewTeam')}</span>
-                </button>
+                
+                <div className="flex items-center gap-2">
+                  {!rewardChoiceMade && (
+                    <button 
+                      onClick={rerollRewards}
+                      disabled={coins < (50 + rerollCount * 50) || loading}
+                      className={`px-3 md:px-4 py-2 font-black italic text-[10px] md:text-xs transition-all skew-x-[-10deg] flex items-center gap-2 ${
+                        coins < (50 + rerollCount * 50) 
+                          ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                          : 'bg-yellow-400 text-slate-900 hover:bg-yellow-500 shadow-md'
+                      }`}
+                    >
+                      <span className="skew-x-[10deg] inline-block flex items-center gap-1 md:gap-2">
+                        <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> 
+                        {t('reroll')} 
+                        <span className="bg-slate-900/10 px-1.5 py-0.5 rounded text-[8px] md:text-[10px] flex items-center gap-1">
+                          <Coins className="w-2 h-2" />{50 + rerollCount * 50}
+                        </span>
+                      </span>
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => {
+                      setInfoPokemonIdx(0);
+                      setPrevGameState(gameState);
+                      setGameState('POKEMON_INFO');
+                    }}
+                    className="px-4 py-2 bg-slate-100 text-slate-500 font-black italic text-xs hover:bg-slate-200 transition-all skew-x-[-10deg]"
+                  >
+                    <span className="skew-x-[10deg] inline-block flex items-center gap-2"><Dna className="w-3 h-3" /> {t('viewTeam')}</span>
+                  </button>
+                  {rewardChoiceMade && !pendingRewardAction && (
+                    <button 
+                      onClick={nextStage}
+                      className="px-8 py-2 bg-blue-600 text-white font-black italic text-sm hover:bg-blue-700 transition-all skew-x-[-10deg] shadow-lg animate-pulse"
+                    >
+                      <span className="skew-x-[10deg] inline-block flex items-center gap-2">{t('nextStep')} <ChevronRight className="w-4 h-4" /></span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-8">
-                <div className="col-span-full flex items-center gap-4 mb-4">
-                  <div className="h-px flex-1 bg-slate-200"></div>
-                  <h3 className="text-xs font-black italic text-slate-400 uppercase tracking-widest">{t('randomRewards')}</h3>
-                  <div className="h-px flex-1 bg-slate-200"></div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar px-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-8">
+                  {rewards.map((reward, i) => {
+                    const isShop = reward.type === 'SHOP_ITEM';
+                    const isClaimed = rewardChoiceMade && !isShop;
+                    const canAfford = !isShop || coins >= reward.data.price;
+                    
+                    return (
+                      <button
+                        key={i}
+                        disabled={isClaimed || !canAfford}
+                        onClick={() => selectReward(reward)}
+                        className={`group relative bg-white p-5 shadow-lg transition-all border-b-4 flex flex-col items-center justify-between min-h-[240px] ${
+                          isClaimed ? 'opacity-40 grayscale cursor-not-allowed border-slate-200' : 
+                          !canAfford ? 'opacity-60 grayscale cursor-not-allowed border-orange-200' : 
+                          isShop ? 'hover:border-orange-500 hover:-translate-y-1 border-orange-100' : 'hover:border-blue-500 hover:-translate-y-1 border-blue-100'
+                        }`}
+                      >
+                        {/* Type Label */}
+                        <div className={`absolute top-0 left-0 px-3 py-1 text-[9px] font-black italic text-white skew-x-[-10deg] z-20 ${isShop ? 'bg-orange-500' : 'bg-blue-500'}`}>
+                          <span className="skew-x-[10deg] inline-block uppercase">{isShop ? t('mysteryShop') : t('randomRewards')}</span>
+                        </div>
+
+                        <div className="w-full flex flex-col items-center pt-4">
+                          {reward.type === 'ITEM' ? (
+                            <>
+                              <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                <Package className="w-8 h-8 text-blue-500" />
+                              </div>
+                              <h4 className="text-base font-black italic mb-1 leading-tight text-center">{getLocalized(reward.data)}</h4>
+                              <p className="text-[10px] text-slate-400 font-bold line-clamp-2 text-center px-2">{getLocalizedDesc(reward.data)}</p>
+                            </>
+                          ) : reward.type === 'MOVE' ? (
+                            <>
+                              <div className="w-16 h-16 bg-yellow-50 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                <Zap className="w-8 h-8 text-yellow-500" />
+                              </div>
+                              <h4 className="text-base font-black italic mb-1 leading-tight text-center">{t('learnMove')}</h4>
+                              <p className="text-[10px] text-slate-400 font-bold line-clamp-2 text-center px-2">{t('learnMoveDesc')}</p>
+                            </>
+                          ) : reward.type === 'EVOLUTION' ? (
+                            <>
+                              <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                <Dna className="w-8 h-8 text-purple-500" />
+                              </div>
+                              <h4 className="text-base font-black italic mb-1 leading-tight text-center">{t('evolutionReward')}</h4>
+                              <p className="text-[10px] text-slate-400 font-bold line-clamp-2 text-center px-2">{t('evolutionRewardDesc')}</p>
+                            </>
+                          ) : reward.type === 'POKEMON' ? (
+                            <>
+                              <div className="relative mb-2 group-hover:scale-110 transition-transform">
+                                <img 
+                                  src={reward.data.sprites.front_default} 
+                                  alt={reward.data.name}
+                                  className="w-20 h-20 object-contain mx-auto relative z-10 drop-shadow-md"
+                                  referrerPolicy="no-referrer"
+                                />
+                              </div>
+                              <h4 className="text-base font-black italic mb-1 uppercase leading-tight text-center">{getLocalized(reward.data)}</h4>
+                              <div className="flex justify-center gap-1 mt-1">
+                                {reward.data.types.map((t: any) => (
+                                  <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
+                                ))}
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                <Package className="w-8 h-8 text-orange-500" />
+                              </div>
+                              <h4 className="text-base font-black italic mb-1 leading-tight text-center">{getLocalized(reward.data.item)}</h4>
+                              <p className="text-[10px] text-slate-400 font-bold line-clamp-2 text-center px-2">{getLocalizedDesc(reward.data.item)}</p>
+                              <div className="mt-3 flex items-center gap-2 bg-orange-100 px-3 py-1 rounded-full">
+                                <Coins className="w-3 h-3 text-orange-600" />
+                                <span className="text-xs font-black text-orange-700">{reward.data.price}</span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        <div className={`mt-6 w-full py-2 px-4 text-white font-black italic skew-x-[-10deg] transition-all text-xs shadow-md ${
+                          isClaimed ? 'bg-slate-300' : 
+                          !canAfford ? 'bg-slate-400' :
+                          isShop ? 'bg-orange-600 group-hover:bg-orange-700' : 'bg-slate-900 group-hover:bg-blue-600'
+                        }`}>
+                          <span className="skew-x-[10deg] inline-block uppercase">
+                            {isClaimed ? 'CLAIMED' : isShop ? (canAfford ? t('buyItem') : t('insufficientCoins')) : t('selectThis')}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-                {rewards.map((reward, i) => (
-                  <button
-                    key={i}
-                    disabled={rewardChoiceMade}
-                    onClick={() => selectReward(reward)}
-                    className={`group relative bg-white p-8 shadow-xl hover:shadow-2xl transition-all hover:-translate-y-2 text-center border-b-8 border-slate-100 hover:border-blue-500 ${rewardChoiceMade ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
+              </div>
+
+              {/* Sub-Action Overlays (Learn Move / Evolution) */}
+              <AnimatePresence>
+                {pendingRewardAction === 'MOVE' && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 20 }}
+                    className="absolute inset-0 z-50 bg-slate-900/95 backdrop-blur-md flex flex-col p-8 overflow-y-auto custom-scrollbar"
                   >
-                    {reward.type === 'ITEM' ? (
-                      <>
-                        <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-8 group-hover:scale-110 transition-transform">
-                          <Package className="w-12 h-12 text-blue-500" />
-                        </div>
-                        <h3 className="text-2xl font-black italic mb-2">{getLocalized(reward.data)}</h3>
-                        <p className="text-sm text-slate-400 font-medium">{getLocalizedDesc(reward.data)}</p>
-                        <div className="mt-4 text-[10px] font-bold text-blue-500 uppercase tracking-widest">{t('getItem')}</div>
-                      </>
-                    ) : reward.type === 'MOVE' ? (
-                      <>
-                        <div className="w-24 h-24 bg-yellow-50 rounded-full flex items-center justify-center mx-auto mb-8 group-hover:scale-110 transition-transform">
-                          <Zap className="w-12 h-12 text-yellow-500" />
-                        </div>
-                        <h3 className="text-2xl font-black italic mb-2">{t('learnMove')}</h3>
-                        <p className="text-sm text-slate-400 font-medium">{t('learnMoveDesc')}</p>
-                        <div className="mt-4 text-[10px] font-bold text-yellow-500 uppercase tracking-widest">{t('specialReward')}</div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="relative mb-8 group-hover:scale-110 transition-transform">
-                          <img 
-                            src={reward.data.sprites.front_default} 
-                            alt={reward.data.name}
-                            className="w-32 h-32 object-contain mx-auto relative z-10 drop-shadow-xl"
-                            referrerPolicy="no-referrer"
-                          />
-                        </div>
-                        <h3 className="text-2xl font-black italic mb-1 uppercase">{getLocalized(reward.data)}</h3>
-                        <div className="text-xs text-emerald-500 font-black mb-4 uppercase tracking-widest italic">{t('joinTeam')}</div>
-                        <div className="flex justify-center gap-2 mb-6">
-                          {reward.data.types.map((t: any) => (
-                            <TypeBadge key={t.type.name} type={t.type.name} size="sm" />
+                    <div className="text-center mb-8 flex-none">
+                      <div className="inline-block bg-blue-600 px-12 py-3 skew-x-[-12deg] shadow-xl mb-4">
+                        <h2 className="text-3xl font-black italic tracking-tighter skew-x-[12deg] text-white">{t('learnMove')}</h2>
+                      </div>
+                      <p className="text-slate-300 font-bold italic text-sm">{t('selectToLearn')}</p>
+                    </div>
+
+                    {learningPokemonIdx === null ? (
+                      <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pb-4 overflow-y-auto custom-scrollbar pr-2 flex-1">
+                          {playerTeam.map((p, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-white p-4 md:p-6 shadow-xl hover:shadow-2xl transition-all border-b-4 border-slate-100 hover:border-blue-500 group flex items-center md:flex-col gap-4 md:gap-0"
+                            >
+                              <img src={p.sprites.front_default} className="w-16 h-16 md:w-24 md:h-24 group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
+                              <div className="flex-1 md:flex-none text-left md:text-center">
+                                <div className="font-black italic text-base md:text-xl uppercase truncate">{getLocalized(p)}</div>
+                                <div className="text-[8px] md:text-[10px] font-bold text-slate-400 mt-1 mb-2 md:mb-4">
+                                  {t('movesCount').replace('{count}', p.selectedMoves.length.toString())}
+                                </div>
+                                <button
+                                  onClick={() => startLearningMove(idx)}
+                                  className="w-full py-2 bg-blue-500 text-white font-black italic text-[10px] md:text-sm hover:bg-blue-600 transition-colors skew-x-[-10deg]"
+                                >
+                                  <span className="skew-x-[10deg] inline-block">{t('learnMoveBtn')}</span>
+                                </button>
+                              </div>
+                            </div>
                           ))}
                         </div>
-                      </>
-                    )}
-                    <div className="mt-8 py-3 px-6 bg-slate-900 text-white font-black italic skew-x-[-10deg] group-hover:bg-blue-600 transition-colors">
-                      <span className="skew-x-[10deg] inline-block">{t('selectThis')}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-8 mt-12">
-                <div className="col-span-full flex items-center gap-4 mb-4">
-                  <div className="h-px flex-1 bg-slate-200"></div>
-                  <h3 className="text-sm font-black italic text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3">
-                    <Sparkles className="w-5 h-5 text-yellow-500" />
-                    {t('mysteryShop')}
-                    <Sparkles className="w-5 h-5 text-yellow-500" />
-                  </h3>
-                  <div className="h-px flex-1 bg-slate-200"></div>
-                </div>
-                {shopItems.map((item, i) => (
-                  <button
-                    key={i}
-                    disabled={rewardChoiceMade || coins < item.price}
-                    onClick={() => buyFromShop(item)}
-                    className={`group relative bg-white p-8 shadow-xl hover:shadow-2xl transition-all hover:-translate-y-2 text-center border-b-8 border-slate-100 hover:border-yellow-500 ${rewardChoiceMade || coins < item.price ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
-                  >
-                    <div className="w-24 h-24 bg-yellow-50 rounded-full flex items-center justify-center mx-auto mb-8 group-hover:scale-110 transition-transform">
-                      <Package className="w-12 h-12 text-yellow-500" />
-                    </div>
-                    <h3 className="text-2xl font-black italic mb-2">{getLocalized(item.item)}</h3>
-                    <p className="text-sm text-slate-400 font-medium">{getLocalizedDesc(item.item)}</p>
-                    <div className="mt-6 flex items-center justify-center gap-2">
-                      <div className="bg-yellow-400 text-white px-4 py-1 skew-x-[-10deg] font-black italic flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 skew-x-[10deg]" />
-                        <span className="skew-x-[10deg]">{item.price}</span>
+                        <div className="mt-auto pt-4 flex-none">
+                          <button 
+                            onClick={() => setPendingRewardAction(null)}
+                            className="w-full py-3 bg-slate-800 text-white font-black italic skew-x-[-12deg] hover:bg-slate-700 transition-colors"
+                          >
+                            <span className="skew-x-[12deg] inline-block">{t('back')}</span>
+                          </button>
+                        </div>
                       </div>
+                    ) : loading ? (
+                      <div className="flex-1 flex flex-col items-center justify-center">
+                        <RefreshCw className="animate-spin w-12 h-12 text-blue-500 mb-4" />
+                        <p className="font-black italic text-slate-400">{t('retrievingMoves')}</p>
+                      </div>
+                    ) : selectedNewMove ? (
+                      <div className="max-w-2xl mx-auto w-full">
+                        <div className="bg-white p-8 shadow-2xl skew-x-[-2deg] border-l-8 border-red-500">
+                          <div className="skew-x-[2deg]">
+                            <h3 className="text-3xl font-black italic mb-2 tracking-tighter">{t('replaceWhichMove')}</h3>
+                            <p className="text-slate-500 mb-8 font-bold italic">
+                              {t('selectOldToReplace').replace('{move}', getLocalized(selectedNewMove))}
+                            </p>
+                            
+                            <div className="grid grid-cols-1 gap-3">
+                              {playerTeam[learningPokemonIdx].selectedMoves.map((m, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => replaceMove(idx)}
+                                  onMouseEnter={() => setHoveredMove(m)}
+                                  onMouseLeave={() => setHoveredMove(null)}
+                                  className="p-4 bg-slate-50 hover:bg-red-50 border-2 border-slate-100 hover:border-red-500 transition-all flex justify-between items-center group"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <TypeBadge type={m.type} size="xs" />
+                                    <span className="font-black italic uppercase group-hover:text-red-600">{getLocalized(m)}</span>
+                                  </div>
+                                  <div className="text-xs font-bold text-slate-400 uppercase">{m.damage_class === 'special' ? t('special') : t('physical')}</div>
+                                </button>
+                              ))}
+                            </div>
+
+                            <button 
+                              onClick={() => setSelectedNewMove(null)}
+                              className="mt-6 w-full py-3 bg-slate-100 text-slate-500 font-black italic hover:bg-slate-200 transition-all"
+                            >
+                              {t('back')}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto custom-scrollbar pr-2 pb-8">
+                          {potentialMoves.map((move, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => handleLearnMove(move)}
+                              onMouseEnter={() => setHoveredMove(move)}
+                              onMouseLeave={() => setHoveredMove(null)}
+                              className="bg-white p-5 shadow-lg hover:shadow-2xl transition-all border-b-4 border-slate-100 hover:border-blue-500 flex flex-col items-center text-center group"
+                            >
+                              <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                <Zap className="w-6 h-6 text-blue-500" />
+                              </div>
+                              <div className="font-black italic text-lg uppercase mb-1">{getLocalized(move)}</div>
+                              <TypeBadge type={move.type} size="xs" />
+                              <div className="mt-3 w-full py-1.5 bg-slate-900 text-white font-black italic text-[10px] skew-x-[-10deg]">
+                                <span className="skew-x-[10deg] inline-block uppercase">{t('learnThisMove')}</span>
+                              </div>
+                            </button>
+                          ))}
+                          {potentialMoves.length === 0 && (
+                            <div className="col-span-full text-center py-12">
+                              <p className="text-slate-400 font-bold italic">{t('noMoreMoves')}</p>
+                              <button 
+                                onClick={() => setLearningPokemonIdx(null)}
+                                className="mt-4 px-6 py-2 bg-slate-800 text-white font-black italic skew-x-[-10deg]"
+                              >
+                                <span className="skew-x-[10deg] inline-block">{t('reselectPokemon')}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+
+                {pendingRewardAction === 'EVOLUTION' && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 20 }}
+                    className="absolute inset-0 z-50 bg-slate-900/95 backdrop-blur-md flex flex-col p-8 overflow-y-auto custom-scrollbar"
+                  >
+                    <div className="text-center mb-8 flex-none">
+                      <div className="inline-block bg-purple-600 px-12 py-3 skew-x-[-12deg] shadow-xl mb-4">
+                        <h2 className="text-3xl font-black italic tracking-tighter skew-x-[12deg] text-white">{t('evolution')}</h2>
+                      </div>
+                      <p className="text-slate-300 font-bold italic text-sm">
+                        {selectedPokemonForEvolution ? t('chooseEvolution') : t('selectToEvolve')}
+                      </p>
                     </div>
-                    <div className="mt-8 py-3 px-6 bg-slate-900 text-white font-black italic skew-x-[-10deg] group-hover:bg-yellow-500 transition-colors">
-                      <span className="skew-x-[10deg] inline-block">{coins < item.price ? t('insufficientCoins') : t('buyItem')}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
+
+                    {!selectedPokemonForEvolution ? (
+                      <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pb-8 overflow-y-auto custom-scrollbar pr-2">
+                          {playerTeam.map((p, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-white p-6 shadow-xl hover:shadow-2xl transition-all border-b-4 border-slate-100 hover:border-purple-500 group flex flex-col items-center"
+                            >
+                              <img src={p.sprites.front_default} className="w-24 h-24 mx-auto mb-4 group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
+                              <div className="font-black italic text-xl uppercase">{getLocalized(p)}</div>
+                              <button
+                                onClick={() => startEvolution(p, idx)}
+                                className="w-full mt-4 py-2 bg-purple-500 text-white font-black italic text-sm hover:bg-purple-600 transition-colors skew-x-[-10deg]"
+                              >
+                                <span className="skew-x-[10deg] inline-block">{t('evolve')}</span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-auto pt-4 flex-none">
+                          <button 
+                            onClick={() => setPendingRewardAction(null)}
+                            className="w-full py-3 bg-slate-800 text-white font-black italic skew-x-[-12deg] hover:bg-slate-700 transition-colors"
+                          >
+                            <span className="skew-x-[12deg] inline-block">{t('back')}</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col h-full">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto pr-2 custom-scrollbar flex-1 mb-4">
+                          {evolutionChoices.map((choice) => (
+                            <motion.button
+                              key={choice.id}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              onClick={() => performEvolution(choice.id)}
+                              className="bg-white p-4 md:p-8 rounded-2xl shadow-xl border-2 md:border-4 border-purple-100 hover:border-purple-500 transition-all flex items-center md:flex-col gap-4 md:gap-0 group relative overflow-hidden"
+                            >
+                              <div className="absolute top-0 right-0 w-12 h-12 md:w-16 md:h-16 bg-purple-500 skew-x-[45deg] translate-x-6 md:translate-x-8 -translate-y-6 md:-translate-y-8 group-hover:translate-x-4 md:group-hover:translate-x-6 group-hover:-translate-y-4 md:group-hover:-translate-y-6 transition-transform" />
+                              <img 
+                                src={choice.sprites.front_default} 
+                                className="w-16 h-16 md:w-32 md:h-32 group-hover:scale-110 transition-transform z-10" 
+                                referrerPolicy="no-referrer" 
+                              />
+                              <div className="flex-1 md:flex-none text-left md:text-center z-10">
+                                <div className="font-black italic text-lg md:text-2xl uppercase text-slate-900">{getLocalized(choice)}</div>
+                                <div className="mt-1 md:mt-4 flex gap-1 md:gap-2">
+                                  {choice.types.map(t => (
+                                    <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
+                                  ))}
+                                </div>
+                              </div>
+                            </motion.button>
+                          ))}
+                        </div>
+                        <div className="flex-none">
+                          <button 
+                            onClick={() => {
+                              setSelectedPokemonForEvolution(null);
+                              setEvolutionChoices([]);
+                            }}
+                            className="w-full py-3 bg-slate-800 text-white font-black italic skew-x-[-12deg] hover:bg-slate-700 transition-colors"
+                          >
+                            <span className="skew-x-[12deg] inline-block">{t('back')}</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* 替换界面 */}
               <AnimatePresence>
@@ -2546,192 +3040,13 @@ export default function App() {
             </motion.div>
           )}
 
-          {gameState === 'LEARN_MOVE' && (
-            <motion.div 
-              key="learn-move"
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex-1 flex flex-col py-4 overflow-y-auto custom-scrollbar"
-            >
-              <div className="text-center mb-8 flex-none">
-                <div className="inline-block bg-slate-900 px-12 py-3 skew-x-[-12deg] shadow-xl mb-4">
-                  <h2 className="text-4xl font-black italic tracking-tighter skew-x-[12deg] text-white">{t('learnMove')}</h2>
-                </div>
-                <p className="text-slate-500 font-bold italic text-sm">{t('selectToLearn')}</p>
-              </div>
-
-              {learningPokemonIdx === null ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 pb-8">
-                  {playerTeam.map((p, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-white p-6 shadow-xl hover:shadow-2xl transition-all border-b-4 border-slate-100 hover:border-blue-500 group flex flex-col items-center"
-                    >
-                      <img src={p.sprites.front_default} className="w-24 h-24 mx-auto mb-4 group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
-                      <div className="font-black italic text-xl uppercase">{getLocalized(p)}</div>
-                      <div className="text-[10px] font-bold text-slate-400 mt-2 mb-4">
-                        {t('movesCount').replace('{count}', p.selectedMoves.length.toString())}
-                      </div>
-                      <div className="flex gap-2 w-full">
-                        <button
-                          onClick={() => startLearningMove(idx)}
-                          className="flex-1 py-2 bg-blue-500 text-white font-black italic text-sm hover:bg-blue-600 transition-colors skew-x-[-10deg]"
-                        >
-                          <span className="skew-x-[10deg] inline-block">{t('learnMoveBtn')}</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setInfoPokemonIdx(idx);
-                            setPrevGameState(gameState);
-                            setGameState('POKEMON_INFO');
-                          }}
-                          className="px-3 py-2 bg-slate-900 text-white font-black italic text-sm hover:bg-slate-700 transition-colors skew-x-[-10deg]"
-                        >
-                          <span className="skew-x-[10deg] inline-block">{t('info')}</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : loading ? (
-                <div className="flex flex-col items-center py-20">
-                  <RefreshCw className="animate-spin w-12 h-12 text-blue-500 mb-4" />
-                  <p className="font-black italic text-slate-400">{t('retrievingMoves')}</p>
-                </div>
-              ) : selectedNewMove ? (
-                <div className="max-w-2xl mx-auto">
-                  <div className="bg-white p-8 shadow-2xl skew-x-[-2deg] border-l-8 border-red-500">
-                    <div className="skew-x-[2deg]">
-                      <h3 className="text-3xl font-black italic mb-2 tracking-tighter">{t('replaceWhichMove')}</h3>
-                      <p className="text-slate-500 mb-8 font-bold italic">
-                        <span className="text-blue-600 uppercase">{getLocalized(playerTeam[learningPokemonIdx])}</span> {t('alreadyKnows4').replace('{name}', '')}
-                        {t('selectOldToReplace').replace('{move}', getLocalized(selectedNewMove))}
-                      </p>
-                      
-                      <div className="grid grid-cols-2 gap-4 relative">
-                        {playerTeam[learningPokemonIdx].selectedMoves.map((m, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => replaceMove(idx)}
-                            onMouseEnter={() => setHoveredMove(m)}
-                            onMouseLeave={() => setHoveredMove(null)}
-                            className="p-4 bg-slate-900 text-white hover:bg-red-600 transition-all text-left group relative overflow-hidden flex justify-between items-center cursor-help"
-                          >
-                            <div className="relative z-10">
-                              <div className="font-black text-lg italic uppercase">{getLocalized(m)}</div>
-                              <div className="text-[10px] opacity-60">{t('power')}: {m.power} / PP: {m.pp}</div>
-                            </div>
-                            <TypeBadge type={m.type} size="xs" className="relative z-10" />
-                          </button>
-                        ))}
-
-                        {/* 技能详情浮层 */}
-                        <AnimatePresence>
-                          {hoveredMove && (
-                            <motion.div
-                              initial={{ opacity: 0, scale: 0.95 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              exit={{ opacity: 0, scale: 0.95 }}
-                              className="absolute bottom-full left-0 right-0 mb-4 bg-slate-900 text-white p-4 shadow-2xl z-50 border-t-4 border-blue-500"
-                            >
-                              <div className="flex justify-between items-center mb-2">
-                                <div className="font-black italic text-lg">{getLocalized(hoveredMove)}</div>
-                                <div className="text-[10px] px-2 py-0.5 bg-white text-slate-900 font-bold uppercase">{hoveredMove.damage_class === 'special' ? '特攻' : '物理'}</div>
-                              </div>
-                              <p className="text-xs text-slate-300 leading-relaxed italic">{getLocalizedDesc(hoveredMove)}</p>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                      <button 
-                        onClick={() => setSelectedNewMove(null)}
-                        className="mt-8 w-full py-4 bg-slate-100 text-slate-400 font-black italic hover:bg-slate-200 transition-all"
-                      >
-                        返回选择技能
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-8">
-                  <div className="flex items-center justify-center gap-4">
-                    <img src={playerTeam[learningPokemonIdx].sprites.front_default} className="w-20 h-20" referrerPolicy="no-referrer" />
-                    <div className="text-left">
-                      <div className="text-2xl font-black italic uppercase">{getLocalized(playerTeam[learningPokemonIdx])}</div>
-                      <div className="text-xs font-bold text-slate-400">正在学习新技能...</div>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
-                    {potentialMoves.map((move, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleLearnMove(move)}
-                        onMouseEnter={() => setHoveredMove(move)}
-                        onMouseLeave={() => setHoveredMove(null)}
-                        className="bg-white p-6 shadow-xl hover:shadow-2xl transition-all hover:-translate-y-1 text-left border-b-4 border-slate-100 hover:border-yellow-500 group cursor-help"
-                      >
-                        <div className="font-black italic text-2xl mb-2 group-hover:text-yellow-600">{getLocalized(move)}</div>
-                        <div className="flex justify-between items-center mb-4">
-                          <TypeBadge type={move.type} size="xs" />
-                          <span className="text-[10px] font-black text-slate-400">威力: {move.power || '--'} / PP: {move.pp || '--'}</span>
-                        </div>
-                        <div className="py-2 px-4 bg-slate-900 text-white text-center font-black italic text-sm group-hover:bg-yellow-500 transition-colors">
-                          学习此技能
-                        </div>
-                      </button>
-                    ))}
-
-                    {/* 技能详情浮层 */}
-                    <AnimatePresence>
-                      {hoveredMove && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.95 }}
-                          className="absolute bottom-full left-0 right-0 mb-4 bg-slate-900 text-white p-6 shadow-2xl z-50 border-t-8 border-yellow-500"
-                        >
-                          <div className="flex justify-between items-center mb-4">
-                            <div className="font-black italic text-2xl">{getLocalized(hoveredMove)}</div>
-                            <div className="flex gap-2">
-                               <span className="text-xs px-3 py-1 bg-white text-slate-900 font-black italic uppercase">{hoveredMove.damage_class === 'special' ? '特攻' : '物理'}</span>
-                               <TypeBadge type={hoveredMove.type} size="md" />
-                            </div>
-                          </div>
-                          <p className="text-sm text-slate-300 leading-relaxed italic mb-4">{getLocalizedDesc(hoveredMove)}</p>
-                          <div className="flex gap-6 text-[10px] font-black italic text-slate-400 border-t border-slate-800 pt-4">
-                            <span>{currentLanguage.startsWith('zh') ? '威力' : 'Power'}: {hoveredMove.power || '--'}</span>
-                            <span>{currentLanguage.startsWith('zh') ? '命中' : 'Accuracy'}: {hoveredMove.accuracy || '--'}</span>
-                            <span>PP: {hoveredMove.pp || '--'}</span>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    {potentialMoves.length === 0 && (
-                      <div className="col-span-full py-20 text-center text-slate-300 font-black italic">
-                        这只宝可梦暂时没有更多可学习的技能了。
-                      </div>
-                    )}
-                  </div>
-                  <button 
-                    onClick={() => setLearningPokemonIdx(null)}
-                    className="block mx-auto text-slate-400 font-bold italic hover:text-slate-900 underline"
-                  >
-                    重新选择宝可梦
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          )}
-
           {gameState === 'POKEMON_INFO' && infoPokemonIdx !== null && (
             <motion.div
               key="pokemon-info"
               initial={{ opacity: 0, x: 100 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -100 }}
-              className="flex-1 flex flex-col max-w-5xl mx-auto w-full overflow-y-auto custom-scrollbar pb-8"
+              className="flex-1 flex flex-col max-w-5xl mx-auto w-full overflow-hidden"
             >
               {(() => {
                 const displayPokemon = prevGameState === 'STARTER_SELECT' 
@@ -2739,147 +3054,149 @@ export default function App() {
                   : playerTeam[infoPokemonIdx];
                 
                 return (
-                  <div className="bg-white shadow-2xl overflow-hidden border-y-8 border-slate-900 flex-none">
-                <div className="grid grid-cols-1 md:grid-cols-2">
-                  {/* 左侧：基本信息与大图 */}
-                  <div className="p-8 bg-slate-50 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4">
-                      <div className="text-6xl font-black italic text-slate-200 tracking-tighter">
-                        #{String(displayPokemon.id).padStart(3, '0')}
-                      </div>
-                    </div>
-                    <div className="relative z-10">
-                      <div className="flex items-center gap-4 mb-8">
-                        <div className="bg-slate-900 text-white px-4 py-1 skew-x-[-12deg] font-black italic text-xl">
-                          <span className="skew-x-[12deg]">LV.{displayPokemon.level}</span>
-                        </div>
-                        <h2 className="text-4xl font-black italic tracking-tighter uppercase">{getLocalized(displayPokemon)}</h2>
-                      </div>
-                      <div className="flex gap-3 mb-8">
-                        {displayPokemon.types.map(t => (
-                          <TypeBadge key={t.type.name} type={t.type.name} size="lg" />
-                        ))}
-                      </div>
-                      <div className="flex justify-center py-12">
-                        <motion.img 
-                          animate={{ y: [0, -10, 0] }}
-                          transition={{ repeat: Infinity, duration: 3 }}
-                          src={displayPokemon.sprites.front_default} 
-                          className="w-64 h-64 object-contain drop-shadow-2xl" 
-                          referrerPolicy="no-referrer" 
-                        />
-                      </div>
-                      <div className="bg-white p-4 border-l-4 border-slate-900 shadow-sm">
-                        <div className="text-xs font-black text-slate-400 uppercase mb-1">{currentLanguage.startsWith('zh') ? '特性' : 'Ability'}</div>
-                        <div className="font-black italic text-lg">
-                          {getLocalized(displayPokemon.abilities[0]?.ability) || (currentLanguage.startsWith('zh') ? '无' : 'None')}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 右侧：能力值与技能 */}
-                  <div className="p-8 bg-white">
-                    <div className="mb-8">
-                      <div className="flex justify-between items-end mb-6 border-b border-slate-100 pb-2">
-                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">{currentLanguage.startsWith('zh') ? '能力值' : 'Stats'}</h3>
-                        <div className="text-[10px] font-bold text-blue-500 italic">
-                          {getLocalizedNature(displayPokemon.nature)} {currentLanguage.startsWith('zh') ? '性格' : 'Nature'} 
-                          ({displayPokemon.nature.plus ? `+${getStatName(displayPokemon.nature.plus)}` : ''}
-                          {displayPokemon.nature.minus ? `, -${getStatName(displayPokemon.nature.minus)}` : ''})
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        {[
-                          { key: 'hp', color: 'bg-red-500' },
-                          { key: 'attack', color: 'bg-orange-500' },
-                          { key: 'defense', color: 'bg-yellow-500' },
-                          { key: 'spAtk', color: 'bg-blue-500' },
-                          { key: 'spDef', color: 'bg-green-500' },
-                          { key: 'speed', color: 'bg-pink-500' }
-                        ].map((s, i) => {
-                          const val = (displayPokemon.calculatedStats as any)[s.key];
-                          const base = (displayPokemon.baseStats as any)[s.key];
-                          const iv = (displayPokemon.ivs as any)[s.key];
-                          const max = 400; 
-                          const statName = getStatName(s.key);
-                          
-                          return (
-                            <div key={i} className="flex flex-col gap-1">
-                              <div className="flex justify-between items-center text-[10px] font-bold italic">
-                                <div className="text-slate-500">{statName}</div>
-                                <div className="text-slate-300">{currentLanguage.startsWith('zh') ? '种族' : 'Base'}: {base} / {currentLanguage.startsWith('zh') ? '个体' : 'IV'}: {iv}</div>
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                  <motion.div 
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${(val / max) * 100}%` }}
-                                    className={`h-full ${s.color}`}
-                                  />
-                                </div>
-                                <div className="w-8 text-right font-black italic text-sm">{val}</div>
-                              </div>
+                  <div className="bg-white shadow-2xl overflow-hidden border-y-4 md:border-y-8 border-slate-900 flex-1 flex flex-col">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar">
+                      <div className="grid grid-cols-1 md:grid-cols-2">
+                        {/* 左侧：基本信息与大图 */}
+                        <div className="p-4 md:p-8 bg-slate-50 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 p-2 md:p-4 opacity-20 md:opacity-100">
+                            <div className="text-4xl md:text-6xl font-black italic text-slate-200 tracking-tighter">
+                              #{String(displayPokemon.id).padStart(3, '0')}
                             </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="relative">
-                      <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 border-b border-slate-100 pb-2">{currentLanguage.startsWith('zh') ? '当前技能' : 'Current Moves'}</h3>
-                      <div className="grid grid-cols-1 gap-3">
-                        {displayPokemon.selectedMoves.map((m, i) => (
-                          <div 
-                            key={i} 
-                            onMouseEnter={() => setHoveredMove(m)}
-                            onMouseLeave={() => setHoveredMove(null)}
-                            className="flex items-center justify-between p-3 bg-slate-50 border-l-4 border-slate-900 group hover:bg-slate-100 transition-colors cursor-help"
-                          >
-                            <div>
-                              <div className="font-black italic uppercase">{getLocalized(m)}</div>
-                              <div className="text-[10px] text-slate-400 font-bold italic">
-                                {currentLanguage.startsWith('zh') ? '威力' : 'Power'}: {m.power || '--'} / 
-                                {currentLanguage.startsWith('zh') ? '命中' : 'Accuracy'}: {m.accuracy || '--'} / 
-                                PP: {m.pp || '--'}
-                              </div>
-                            </div>
-                            <TypeBadge type={m.type} size="xs" />
                           </div>
-                        ))}
-                      </div>
-
-                      {/* 技能详情浮层 */}
-                      <AnimatePresence>
-                        {hoveredMove && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 10 }}
-                            className="absolute bottom-full left-0 right-0 mb-4 bg-slate-900 text-white p-4 shadow-2xl z-50 border-t-4 border-blue-500"
-                          >
-                            <div className="flex justify-between items-center mb-2">
-                              <div className="font-black italic text-lg">{getLocalized(hoveredMove)}</div>
-                              <div className="text-[10px] px-2 py-0.5 bg-white text-slate-900 font-bold uppercase">{hoveredMove.damage_class === 'special' ? '特攻' : '物理'}</div>
+                          <div className="relative z-10">
+                            <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-8">
+                              <div className="bg-slate-900 text-white px-3 py-1 skew-x-[-12deg] font-black italic text-sm md:text-xl">
+                                <span className="skew-x-[12deg]">LV.{displayPokemon.level}</span>
+                              </div>
+                              <h2 className="text-2xl md:text-4xl font-black italic tracking-tighter uppercase truncate">{getLocalized(displayPokemon)}</h2>
                             </div>
-                            <p className="text-xs text-slate-300 leading-relaxed italic">{getLocalizedDesc(hoveredMove)}</p>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                            <div className="flex gap-2 md:gap-3 mb-4 md:mb-8">
+                              {displayPokemon.types.map(t => (
+                                <TypeBadge key={t.type.name} type={t.type.name} size={window.innerWidth < 768 ? "sm" : "lg"} />
+                              ))}
+                            </div>
+                            <div className="flex justify-center py-4 md:py-12">
+                              <motion.img 
+                                animate={{ y: [0, -10, 0] }}
+                                transition={{ repeat: Infinity, duration: 3 }}
+                                src={displayPokemon.sprites.front_default} 
+                                className="w-40 h-40 md:w-64 md:h-64 object-contain drop-shadow-2xl" 
+                                referrerPolicy="no-referrer" 
+                              />
+                            </div>
+                            <div className="bg-white p-3 md:p-4 border-l-4 border-slate-900 shadow-sm">
+                              <div className="text-[10px] font-black text-slate-400 uppercase mb-1">{currentLanguage.startsWith('zh') ? '特性' : 'Ability'}</div>
+                              <div className="font-black italic text-base md:text-lg">
+                                {getLocalized(displayPokemon.abilities[0]?.ability) || (currentLanguage.startsWith('zh') ? '无' : 'None')}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 右侧：能力值与技能 */}
+                        <div className="p-4 md:p-8 bg-white">
+                          <div className="mb-6 md:mb-8">
+                            <div className="flex justify-between items-end mb-4 md:mb-6 border-b border-slate-100 pb-2">
+                              <h3 className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400">{currentLanguage.startsWith('zh') ? '能力值' : 'Stats'}</h3>
+                              <div className="text-[8px] md:text-[10px] font-bold text-blue-500 italic">
+                                {getLocalizedNature(displayPokemon.nature)} {currentLanguage.startsWith('zh') ? '性格' : 'Nature'} 
+                                ({displayPokemon.nature.plus ? `+${getStatName(displayPokemon.nature.plus)}` : ''}
+                                {displayPokemon.nature.minus ? `, -${getStatName(displayPokemon.nature.minus)}` : ''})
+                              </div>
+                            </div>
+                            <div className="space-y-2 md:space-y-3">
+                              {[
+                                { key: 'hp', color: 'bg-red-500' },
+                                { key: 'attack', color: 'bg-orange-500' },
+                                { key: 'defense', color: 'bg-yellow-500' },
+                                { key: 'spAtk', color: 'bg-blue-500' },
+                                { key: 'spDef', color: 'bg-green-500' },
+                                { key: 'speed', color: 'bg-pink-500' }
+                              ].map((s, i) => {
+                                const val = (displayPokemon.calculatedStats as any)[s.key];
+                                const base = (displayPokemon.baseStats as any)[s.key];
+                                const iv = (displayPokemon.ivs as any)[s.key];
+                                const max = 400; 
+                                const statName = getStatName(s.key);
+                                
+                                return (
+                                  <div key={i} className="flex flex-col gap-0.5 md:gap-1">
+                                    <div className="flex justify-between items-center text-[8px] md:text-[10px] font-bold italic">
+                                      <div className="text-slate-500">{statName}</div>
+                                      <div className="text-slate-300">{currentLanguage.startsWith('zh') ? '种族' : 'Base'}: {base} / {currentLanguage.startsWith('zh') ? '个体' : 'IV'}: {iv}</div>
+                                    </div>
+                                    <div className="flex items-center gap-3 md:gap-4">
+                                      <div className="flex-1 h-1.5 md:h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <motion.div 
+                                          initial={{ width: 0 }}
+                                          animate={{ width: `${(val / max) * 100}%` }}
+                                          className={`h-full ${s.color}`}
+                                        />
+                                      </div>
+                                      <div className="w-6 md:w-8 text-right font-black italic text-xs md:text-sm">{val}</div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="relative">
+                            <h3 className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400 mb-4 md:mb-6 border-b border-slate-100 pb-2">{currentLanguage.startsWith('zh') ? '当前技能' : 'Current Moves'}</h3>
+                            <div className="grid grid-cols-1 gap-2 md:gap-3">
+                              {displayPokemon.selectedMoves.map((m, i) => (
+                                <div 
+                                  key={i} 
+                                  onMouseEnter={() => setHoveredMove(m)}
+                                  onMouseLeave={() => setHoveredMove(null)}
+                                  className="flex items-center justify-between p-2 md:p-3 bg-slate-50 border-l-4 border-slate-900 group hover:bg-slate-100 transition-colors cursor-help"
+                                >
+                                  <div className="flex-1 min-w-0 pr-2">
+                                    <div className="font-black italic uppercase text-xs md:text-sm truncate">{getLocalized(m)}</div>
+                                    <div className="text-[8px] md:text-[10px] text-slate-400 font-bold italic truncate">
+                                      {currentLanguage.startsWith('zh') ? '威力' : 'Power'}: {m.power || '--'} / 
+                                      {currentLanguage.startsWith('zh') ? '命中' : 'Accuracy'}: {m.accuracy || '--'} / 
+                                      PP: {m.pp || '--'}
+                                    </div>
+                                  </div>
+                                  <TypeBadge type={m.type} size="xs" />
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* 技能详情浮层 */}
+                            <AnimatePresence>
+                              {hoveredMove && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: 10 }}
+                                  className="absolute bottom-full left-0 right-0 mb-2 md:mb-4 bg-slate-900 text-white p-3 md:p-4 shadow-2xl z-50 border-t-4 border-blue-500"
+                                >
+                                  <div className="flex justify-between items-center mb-1 md:mb-2">
+                                    <div className="font-black italic text-sm md:text-lg">{getLocalized(hoveredMove)}</div>
+                                    <div className="text-[8px] md:text-[10px] px-2 py-0.5 bg-white text-slate-900 font-bold uppercase">{hoveredMove.damage_class === 'special' ? '特攻' : '物理'}</div>
+                                  </div>
+                                  <p className="text-[10px] md:text-xs text-slate-300 leading-relaxed italic">{getLocalizedDesc(hoveredMove)}</p>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-slate-900 p-3 md:p-4 flex justify-end flex-none">
+                      <button 
+                        onClick={() => setGameState(prevGameState)}
+                        className="px-6 md:px-8 py-2 bg-white text-slate-900 font-black italic skew-x-[-12deg] hover:bg-blue-500 hover:text-white transition-all text-sm md:text-base"
+                      >
+                        <span className="skew-x-[12deg]">{t('back')}</span>
+                      </button>
                     </div>
                   </div>
-                </div>
-                <div className="bg-slate-900 p-4 flex justify-end">
-                  <button 
-                    onClick={() => setGameState(prevGameState)}
-                    className="px-8 py-2 bg-white text-slate-900 font-black italic skew-x-[-12deg] hover:bg-blue-500 hover:text-white transition-all"
-                  >
-                    <span className="skew-x-[12deg]">返回</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
+                );
+              })()}
             </motion.div>
           )}
 
@@ -2888,20 +3205,22 @@ export default function App() {
               key="gameover"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="flex flex-col items-center justify-center py-32 text-center"
+              className="flex-1 flex flex-col items-center justify-center p-4 text-center"
             >
-              <div className="bg-red-500 p-8 skew-x-[-12deg] shadow-2xl mb-8">
-                <Skull className="w-20 h-20 text-white skew-x-[12deg]" />
+              <div className="bg-red-500 p-6 md:p-8 skew-x-[-12deg] shadow-2xl mb-6 md:mb-8">
+                <Skull className="w-12 h-12 md:w-20 md:h-20 text-white skew-x-[12deg]" />
               </div>
-              <h2 className="text-7xl font-black mb-4 tracking-tighter italic text-slate-900">挑战结束</h2>
-              <p className="text-slate-500 text-2xl font-bold italic mb-12">你在第 {stage} 关倒下了</p>
+              <h2 className="text-4xl md:text-7xl font-black mb-4 tracking-tighter italic text-slate-900 uppercase">{t('gameOver')}</h2>
+              <div className="bg-slate-900 text-white px-6 py-2 skew-x-[-10deg] mb-8">
+                <p className="font-black italic text-lg md:text-2xl skew-x-[10deg]">{t('reachedFloor')} {stage}</p>
+              </div>
               
               <button 
                 onClick={() => setGameState('START')}
-                className="px-12 py-5 bg-slate-900 text-white font-black text-2xl skew-x-[-12deg] hover:bg-blue-600 transition-all shadow-xl"
+                className="px-10 md:px-12 py-4 md:py-5 bg-slate-900 text-white font-black text-xl md:text-2xl skew-x-[-12deg] hover:bg-blue-600 transition-all shadow-xl"
               >
                 <span className="flex items-center gap-3 skew-x-[12deg]">
-                  <RefreshCw className="w-6 h-6" /> 重新开始
+                  <RefreshCw className="w-5 h-5 md:w-6 md:h-6" /> {t('restart')}
                 </span>
               </button>
             </motion.div>

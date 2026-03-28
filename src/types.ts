@@ -106,7 +106,9 @@ export interface Item {
   catchRate?: number;
 }
 
-export type GameState = 'START' | 'MENU' | 'BATTLE' | 'REWARD' | 'LEARN_MOVE' | 'POKEMON_INFO' | 'GAMEOVER' | 'STARTER_SELECT';
+export type Weather = 'none' | 'sunny' | 'rainy' | 'sandstorm' | 'hail';
+
+export type GameState = 'START' | 'MENU' | 'BATTLE' | 'REWARD' | 'LEARN_MOVE' | 'POKEMON_INFO' | 'GAMEOVER' | 'STARTER_SELECT' | 'EVOLUTION';
 export type BattleMenuTab = 'MAIN' | 'MOVES' | 'POKEMON' | 'BAG';
 
 export interface LanguageConfig {

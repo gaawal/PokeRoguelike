@@ -118,6 +118,40 @@ export async function fetchMove(url: string): Promise<Move> {
   };
 }
 
+export async function fetchEvolutionChain(pokemonId: number): Promise<number[]> {
+  try {
+    const speciesRes = await fetch(`${BASE_URL}/pokemon-species/${pokemonId}`);
+    if (!speciesRes.ok) return [];
+    const speciesData = await speciesRes.json();
+    const evolutionRes = await fetch(speciesData.evolution_chain.url);
+    if (!evolutionRes.ok) return [];
+    const evolutionData = await evolutionRes.json();
+    
+    const evolutions: number[] = [];
+    let current = evolutionData.chain;
+    
+    const findNext = (node: any): boolean => {
+      const id = parseInt(node.species.url.split('/').filter(Boolean).pop());
+      if (id === pokemonId) {
+        node.evolves_to.forEach((next: any) => {
+          const nextId = parseInt(next.species.url.split('/').filter(Boolean).pop());
+          evolutions.push(nextId);
+        });
+        return true;
+      }
+      for (const next of node.evolves_to) {
+        if (findNext(next)) return true;
+      }
+      return false;
+    };
+    
+    findNext(current);
+    return evolutions;
+  } catch (e) {
+    return [];
+  }
+}
+
 export async function getLearnableMoves(pokemon: any, currentMoves: Move[], count: number = 3): Promise<Move[]> {
   const currentNames = currentMoves.map(m => m.name);
   const potentialMoves = pokemon.moves.filter((m: any) => !currentNames.includes(m.move.name));
