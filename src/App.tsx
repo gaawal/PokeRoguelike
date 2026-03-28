@@ -3212,7 +3212,7 @@ export default function App() {
               </div>
               <h2 className="text-4xl md:text-7xl font-black mb-4 tracking-tighter italic text-slate-900 uppercase">{t('gameOver')}</h2>
               <div className="bg-slate-900 text-white px-6 py-2 skew-x-[-10deg] mb-8">
-                <p className="font-black italic text-lg md:text-2xl skew-x-[10deg]">{t('reachedFloor')} {stage}</p>
+                <p className="font-black italic text-lg md:text-2xl skew-x-[10deg]">{t('reachedFloor', { stage })}</p>
               </div>
               
               <button 
