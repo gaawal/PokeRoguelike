@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Info,
   Dna,
+  CloudRain,
   Package,
   Target,
   Sparkles,
@@ -37,7 +38,7 @@ import {
   Coins
 } from 'lucide-react';
 import { getProcessedPokemon, getRandomPokemonId, getLearnableMoves, fetchEvolutionChain, fetchPokemon } from './services/pokeApi';
-import { GamePokemon, GameState, Item, Move, BattleMenuTab, SUPPORTED_LANGUAGES, Nature, StatStages, Weather, Pokemon } from './types';
+import { GamePokemon, GameState, Item, Move, BattleMenuTab, SUPPORTED_LANGUAGES, Nature, StatStages, Weather, Terrain, Dimension, Pokemon } from './types';
 import { TYPE_CHART, TYPE_ZH, GENERATIONS } from './constants';
 
 // 属性颜色映射
@@ -85,6 +86,7 @@ const TYPE_ICONS: Record<string, any> = {
 
 const AILMENT_ZH: Record<string, string> = {
   poison: '中毒',
+  toxic: '剧毒',
   paralysis: '麻痹',
   burn: '灼伤',
   freeze: '冰冻',
@@ -136,6 +138,24 @@ const ACC_EVA_STAGE_MODIFIERS: Record<number, number> = {
   '4': 7 / 3,
   '5': 8 / 3,
   '6': 9 / 3,
+};
+
+const STRUGGLE_MOVE: Move = {
+  id: 'struggle',
+  name: 'struggle',
+  type: 'normal',
+  power: 50,
+  accuracy: null,
+  damage_class: 'physical',
+  pp: 1,
+  currentPP: 1,
+  maxPP: 1,
+  priority: 0,
+  drain: -25,
+  statChanges: null,
+  ailment: null,
+  ailmentChance: 0,
+  target: 'selected-pokemon'
 };
 
 const TypeBadge: React.FC<{ type: string, size?: 'xs' | 'sm' | 'md' | 'lg', className?: string }> = ({ type, size = 'sm', className = "" }) => {
@@ -222,6 +242,24 @@ const ALL_ITEMS: Item[] = [
     isBall: true,
     catchRate: 255, // 255 is guaranteed catch in my formula
     effect: (p) => p
+  },
+  {
+    id: 'leftovers',
+    name: 'Leftovers',
+    zhName: '吃剩的东西',
+    description: 'Heal a little HP each turn',
+    zhDescription: '每回合恢复一点HP',
+    isBattleItem: true,
+    effect: (p) => ({ ...p, heldItem: ALL_ITEMS.find(i => i.id === 'leftovers') })
+  },
+  {
+    id: 'focus_sash',
+    name: 'Focus Sash',
+    zhName: '气势披带',
+    description: 'Survive one hit at full HP',
+    zhDescription: '满HP时受到致命伤会保留1点HP',
+    isBattleItem: true,
+    effect: (p) => ({ ...p, heldItem: ALL_ITEMS.find(i => i.id === 'focus_sash') })
   },
   {
     id: 'protein',
@@ -350,6 +388,10 @@ export default function App() {
 
   const [weather, setWeather] = useState<Weather>('none');
   const [weatherTurns, setWeatherTurns] = useState(0);
+  const [terrain, setTerrain] = useState<Terrain>('none');
+  const [terrainTurns, setTerrainTurns] = useState(0);
+  const [dimension, setDimension] = useState<Dimension>('none');
+  const [dimensionTurns, setDimensionTurns] = useState(0);
   const [evolutionTarget, setEvolutionTarget] = useState<GamePokemon | null>(null);
   const [isEvolving, setIsEvolving] = useState(false);
   const [evolvedPokemon, setEvolvedPokemon] = useState<GamePokemon | null>(null);
@@ -476,11 +518,35 @@ export default function App() {
       weather_sunny: '天气：大晴天',
       weather_rainy: '天气：下雨',
       weather_sandstorm: '天气：沙暴',
-      weather_hail: '天气：冰雹',
+      weather_snow: '天气：下雪',
+      weather_heavy_rain: '天气：始源之海',
+      weather_harsh_sunlight: '天气：终结之地',
+      weather_strong_winds: '天气：德尔塔气流',
       weather_sunny_effect: '阳光增强了火属性技能，削弱了水属性技能。',
       weather_rainy_effect: '降雨增强了水属性技能，削弱了火属性技能。',
       weather_sandstorm_effect: '沙暴正在肆虐！岩石、地面和钢属性以外的宝可梦会受到伤害。',
-      weather_hail_effect: '冰雹正在降下！冰属性以外的宝可梦会受到伤害。',
+      weather_snow_effect: '大雪正在降下！冰属性宝可梦的防御提升。',
+      weather_heavy_rain_effect: '始源之海正在肆虐！火属性技能无效。',
+      weather_harsh_sunlight_effect: '终结之地正在肆虐！水属性技能无效。',
+      weather_strong_winds_effect: '德尔塔气流正在肆虐！飞行属性的弱点消失。',
+      
+      terrain_none: '场地：无',
+      terrain_electric: '场地：电气场地',
+      terrain_grassy: '场地：青草场地',
+      terrain_psychic: '场地：精神场地',
+      terrain_misty: '场地：薄雾场地',
+      terrain_electric_effect: '电属性技能威力提升，地面上的宝可梦无法入眠。',
+      terrain_grassy_effect: '草属性技能威力提升，地面上的宝可梦每回合回复HP。',
+      terrain_psychic_effect: '超能力属性技能威力提升，地面上的宝可梦免疫先制技能。',
+      terrain_misty_effect: '龙属性技能伤害减半，地面上的宝可梦免疫异常状态。',
+
+      dimension_none: '维度：无',
+      dimension_trick_room: '维度：戏法空间',
+      dimension_magic_room: '维度：魔术空间',
+      dimension_wonder_room: '维度：奇妙空间',
+      dimension_trick_room_effect: '速度慢的宝可梦先行动。',
+      dimension_magic_room_effect: '所有宝可梦的携带道具无效。',
+      dimension_wonder_room_effect: '所有宝可梦的防御与特防互换。',
       reroll: '重新选择',
       rerollCost: '消耗 {cost} 金币',
       reachedFloor: '你在第 {stage} 关倒下了',
@@ -605,11 +671,35 @@ export default function App() {
       weather_sunny: '天氣：大晴天',
       weather_rainy: '天氣：下雨',
       weather_sandstorm: '天氣：沙暴',
-      weather_hail: '天氣：冰雹',
+      weather_snow: '天氣：下雪',
+      weather_heavy_rain: '天氣：始源之海',
+      weather_harsh_sunlight: '天氣：終結之地',
+      weather_strong_winds: '天氣：德爾塔氣流',
       weather_sunny_effect: '陽光增強了火屬性技能，削弱了水屬性技能。',
       weather_rainy_effect: '降雨增強了水屬性技能，削弱了火屬性技能。',
       weather_sandstorm_effect: '沙暴正在肆虐！岩石、地面和鋼屬性以外的寶可夢會受到傷害。',
-      weather_hail_effect: '冰雹正在降下！冰屬性以外的寶可夢會受到傷害。',
+      weather_snow_effect: '大雪正在降下！冰屬性寶可夢的防禦提升。',
+      weather_heavy_rain_effect: '始源之海正在肆虐！火屬性技能無效。',
+      weather_harsh_sunlight_effect: '終結之地正在肆虐！水屬性技能無效。',
+      weather_strong_winds_effect: '德爾塔氣流正在肆虐！飛行屬性的弱點消失。',
+
+      terrain_none: '場地：無',
+      terrain_electric: '場地：電氣場地',
+      terrain_grassy: '場地：青草場地',
+      terrain_psychic: '場地：精神場地',
+      terrain_misty: '場地：薄霧場地',
+      terrain_electric_effect: '電屬性技能威力提升，地面上的寶可夢無法入眠。',
+      terrain_grassy_effect: '草屬性技能威力提升，地面上的寶可夢每回合回復HP。',
+      terrain_psychic_effect: '超能力屬性技能威力提升，地面上的寶可夢免疫先制技能。',
+      terrain_misty_effect: '龍屬性技能傷害減半，地面上的寶可夢免疫異常狀態。',
+
+      dimension_none: '維度：無',
+      dimension_trick_room: '維度：戲法空間',
+      dimension_magic_room: '維度：魔術空間',
+      dimension_wonder_room: '維度：奇妙空間',
+      dimension_trick_room_effect: '速度慢的寶可夢先行動。',
+      dimension_magic_room_effect: '所有寶可夢的攜帶道具無效。',
+      dimension_wonder_room_effect: '所有寶可夢的防禦與特防互換。',
       reroll: '重新選擇',
       rerollCost: '消耗 {cost} 點金幣',
       reachedFloor: '你在第 {stage} 關倒下了',
@@ -734,11 +824,35 @@ export default function App() {
       weather_sunny: 'Weather: Sunny',
       weather_rainy: 'Weather: Rainy',
       weather_sandstorm: 'Weather: Sandstorm',
-      weather_hail: 'Weather: Hail',
+      weather_snow: 'Weather: Snow',
+      weather_heavy_rain: 'Weather: Primordial Sea',
+      weather_harsh_sunlight: 'Weather: Desolate Land',
+      weather_strong_winds: 'Weather: Delta Stream',
       weather_sunny_effect: 'The sunlight is strong! Fire moves are boosted, Water moves are weakened.',
       weather_rainy_effect: 'It is raining! Water moves are boosted, Fire moves are weakened.',
       weather_sandstorm_effect: 'A sandstorm is raging! Non-Rock/Ground/Steel Pokemon take damage.',
-      weather_hail_effect: 'Hail is falling! Non-Ice Pokemon take damage.',
+      weather_snow_effect: 'Snow is falling! Ice Pokemon defense is boosted.',
+      weather_heavy_rain_effect: 'The Primordial Sea is raging! Fire moves are neutralized.',
+      weather_harsh_sunlight_effect: 'The Desolate Land is raging! Water moves are neutralized.',
+      weather_strong_winds_effect: 'The Delta Stream is raging! Flying types weaknesses are removed.',
+
+      terrain_none: 'Terrain: None',
+      terrain_electric: 'Terrain: Electric',
+      terrain_grassy: 'Terrain: Grassy',
+      terrain_psychic: 'Terrain: Psychic',
+      terrain_misty: 'Terrain: Misty',
+      terrain_electric_effect: 'Electric moves are boosted. Pokemon on the ground cannot sleep.',
+      terrain_grassy_effect: 'Grassy moves are boosted. Pokemon on the ground restore HP each turn.',
+      terrain_psychic_effect: 'Psychic moves are boosted. Pokemon on the ground are immune to priority moves.',
+      terrain_misty_effect: 'Dragon moves are halved. Pokemon on the ground are immune to status ailments.',
+
+      dimension_none: 'Dimension: None',
+      dimension_trick_room: 'Dimension: Trick Room',
+      dimension_magic_room: 'Dimension: Magic Room',
+      dimension_wonder_room: 'Dimension: Wonder Room',
+      dimension_trick_room_effect: 'Slower Pokemon move first.',
+      dimension_magic_room_effect: 'Held items have no effect.',
+      dimension_wonder_room_effect: 'Defense and Sp. Def are swapped.',
       reroll: 'Reroll',
       rerollCost: 'Cost {cost} Coins',
       reachedFloor: 'You reached floor {stage}',
@@ -830,6 +944,7 @@ export default function App() {
   // 动画状态
   const [playerAnim, setPlayerAnim] = useState<'idle' | 'attack' | 'hit'>('idle');
   const [enemyAnim, setEnemyAnim] = useState<'idle' | 'attack' | 'hit'>('idle');
+  const [isFaintedReplacement, setIsFaintedReplacement] = useState(false);
   const [activeMoveType, setActiveMoveType] = useState<string | null>(null);
   const [isCatching, setIsCatching] = useState(false);
   const [catchSuccess, setCatchSuccess] = useState<boolean | null>(null);
@@ -865,10 +980,15 @@ export default function App() {
     }
   };
 
-  const selectStarter = (index: number) => {
-    setPlayerTeam([starterOptions[index]]);
+  const selectStarter = async (index: number) => {
+    const starter = starterOptions[index];
+    setPlayerTeam([starter]);
     startBattleTransition();
-    spawnEnemy(1);
+    const enemyPoke = await spawnEnemy(1);
+    if (enemyPoke) {
+      await triggerAbility(starter, enemyPoke, true);
+      await triggerAbility(enemyPoke, starter, false);
+    }
   };
 
   const healAllPokemon = () => {
@@ -885,7 +1005,7 @@ export default function App() {
     }, 800);
   };
 
-  const spawnEnemy = async (currentStage: number) => {
+  const spawnEnemy = async (currentStage: number): Promise<GamePokemon | null> => {
     setLoading(true);
     try {
       const isGym = currentStage % 5 === 0;
@@ -922,8 +1042,10 @@ export default function App() {
       setBattleMenuTab('MAIN');
       setActiveBuffs({ atk: false, def: false });
       setEnemyBuffs({ atk: false, def: false });
+      return p;
     } catch (err) {
       console.error(err);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -931,6 +1053,11 @@ export default function App() {
 
   const useItem = async (item: Item, index: number) => {
     if (gameState !== 'BATTLE' || turn !== 'PLAYER' || isMessageProcessing) return;
+
+    if (dimension === 'magic_room') {
+      await addMessagesSequentially([t('dimension_magic_room_block')]);
+      return;
+    }
 
     // 消耗道具
     const newInventory = [...inventory];
@@ -1004,7 +1131,8 @@ export default function App() {
   };
 
   const switchPokemon = async (index: number) => {
-    if (gameState !== 'BATTLE' || turn !== 'PLAYER' || index === 0 || isMessageProcessing) return;
+    if (gameState !== 'BATTLE' || index === 0 || isMessageProcessing) return;
+    if (!isFaintedReplacement && turn !== 'PLAYER') return;
     
     const newTeam = [...playerTeam];
     const temp = newTeam[0];
@@ -1013,7 +1141,24 @@ export default function App() {
     
     setPlayerTeam(newTeam);
     await addMessagesSequentially([t('withdrew').replace('{name}', getLocalized(temp)), t('sentOut').replace('{name}', getLocalized(newTeam[0]))]);
-    setTurn('ENEMY');
+    
+    if (enemy) {
+      await triggerAbility(newTeam[0], enemy, true);
+    }
+
+    if (isFaintedReplacement) {
+      setIsFaintedReplacement(false);
+      setTurn('PLAYER');
+    } else {
+      setTurn('ENEMY');
+      // Force enemy turn
+      const availableEnemyMoves = enemy!.selectedMoves.filter(m => (m.currentPP || 0) > 0);
+      const enemyMove = availableEnemyMoves.length > 0 
+        ? availableEnemyMoves[Math.floor(Math.random() * availableEnemyMoves.length)]
+        : STRUGGLE_MOVE;
+      await executeAttack(enemyMove, enemy!, newTeam[0], false);
+      setTurn('PLAYER');
+    }
     setBattleMenuTab('MAIN');
   };
 
@@ -1026,450 +1171,631 @@ export default function App() {
     setIsMessageProcessing(false);
   };
 
-  const handleAttack = async (move: Move) => {
-    if (!enemy || gameState !== 'BATTLE' || turn !== 'PLAYER' || isMessageProcessing) return;
+  const isGrounded = (p: GamePokemon) => !p.types.some(t => t.type.name === 'flying');
+  const isRockGroundSteel = (p: GamePokemon) => p.types.some(t => ['rock', 'ground', 'steel'].includes(t.type.name));
+  const isIce = (p: GamePokemon) => p.types.some(t => t.type.name === 'ice');
 
-    const player = playerTeam[0];
-    
-    // 检查异常状态限制 (如麻痹、睡眠、冰冻)
-    if (player.status === 'sleep') {
-      await addMessagesSequentially([`${getLocalized(player)} 正在呼呼大睡...`]);
-      if (Math.random() < 0.33) {
-        const updatedTeam = [...playerTeam];
-        updatedTeam[0] = { ...player, status: undefined };
-        setPlayerTeam(updatedTeam);
-        await addMessagesSequentially([`${getLocalized(player)} 醒过来了！`]);
-      } else {
-        setTurn('ENEMY');
-        return;
-      }
-    }
-    if (player.status === 'freeze') {
-      await addMessagesSequentially([`${getLocalized(player)} 冻得严严实实...`]);
-      if (Math.random() < 0.2) {
-        const updatedTeam = [...playerTeam];
-        updatedTeam[0] = { ...player, status: undefined };
-        setPlayerTeam(updatedTeam);
-        await addMessagesSequentially([`${getLocalized(player)} 的冰融化了！`]);
-      } else {
-        setTurn('ENEMY');
-        return;
-      }
-    }
-    if (player.status === 'paralysis' && Math.random() < 0.25) {
-      await addMessagesSequentially([`${getLocalized(player)} 麻痹了，无法动弹！`]);
-      setTurn('ENEMY');
-      return;
-    }
+  const triggerAbility = async (pokemon: GamePokemon, target: GamePokemon, isPlayer: boolean) => {
+    const ability = pokemon.abilities[0]?.ability.name;
+    const pokeName = getLocalized(pokemon);
+    const targetName = getLocalized(target);
 
-    setActiveMoveType(move.type);
-    setPlayerAnim('attack');
-    
-    // 1. 使用技能消息
-    await addMessagesSequentially([t('usedMove').replace('{name}', getLocalized(player)).replace('{move}', getLocalized(move))]);
-    
-    const { damage, multiplier, isMiss, isCrit } = calculateDamage(move, player, enemy, activeBuffs.atk, enemyBuffs.def);
-    
-    if (isMiss) {
-      await addMessagesSequentially([`${getLocalized(player)} 的攻击落空了！`]);
-      setPlayerAnim('idle');
-      setActiveMoveType(null);
-      setTurn('ENEMY');
-      return;
+    if (ability === 'intimidate') {
+      await addMessagesSequentially([`${pokeName} 的威吓降低了 ${targetName} 的攻击！`]);
+      const newStatStages = { ...target.statStages };
+      newStatStages.attack = Math.max(-6, newStatStages.attack - 1);
+      target.statStages = newStatStages;
+      if (isPlayer) setEnemy({ ...target });
+      else setPlayerTeam(prev => [{ ...prev[0], statStages: target.statStages }, ...prev.slice(1)]);
     }
-
-    if (isCrit) {
-      await addMessagesSequentially(['击中了要害！']);
-    }
-
-    const newEnemyHp = Math.max(0, enemy.currentHp - damage);
-    
-    if (damage > 0) {
-      setEnemyAnim('hit');
-    }
-    let updatedEnemy = { ...enemy, currentHp: newEnemyHp };
-    
-    // 处理吸血
-    let playerHpChange = 0;
-    if (move.drain !== 0 && damage > 0) {
-      const drainAmount = Math.floor(damage * move.drain / 100);
-      playerHpChange += drainAmount;
-    }
-    // 处理回血
-    if (move.healing !== 0) {
-      const healAmount = Math.floor(player.maxHp * move.healing / 100);
-      playerHpChange += healAmount;
-    }
-
-    const finalPlayerHp = Math.max(0, Math.min(player.maxHp, player.currentHp + playerHpChange));
-    const updatedTeam = [...playerTeam];
-    updatedTeam[0] = { ...player, currentHp: finalPlayerHp };
-    setPlayerTeam(updatedTeam);
-
-    if (playerHpChange > 0) {
-      await addMessagesSequentially([`${getLocalized(player)} 恢复了体力！`]);
-    } else if (playerHpChange < 0) {
-      await addMessagesSequentially([`${getLocalized(player)} 受到了反作用力伤害！`]);
-    }
-
-    // 5. 天气伤害
-    if (weather === 'sandstorm' || weather === 'hail') {
-      const isRockGroundSteel = (p: GamePokemon) => p.types.some(t => ['rock', 'ground', 'steel'].includes(t.type.name));
-      const isIce = (p: GamePokemon) => p.types.some(t => t.type.name === 'ice');
-      
-      if (weather === 'sandstorm' && !isRockGroundSteel(updatedEnemy) && newEnemyHp > 0) {
-        const weatherDmg = Math.floor(updatedEnemy.maxHp / 16);
-        updatedEnemy.currentHp = Math.max(0, updatedEnemy.currentHp - weatherDmg);
-        await addMessagesSequentially([t('weatherDamage').replace('{name}', getLocalized(updatedEnemy))]);
-      } else if (weather === 'hail' && !isIce(updatedEnemy) && newEnemyHp > 0) {
-        const weatherDmg = Math.floor(updatedEnemy.maxHp / 16);
-        updatedEnemy.currentHp = Math.max(0, updatedEnemy.currentHp - weatherDmg);
-        await addMessagesSequentially([t('weatherDamage').replace('{name}', getLocalized(updatedEnemy))]);
-      }
-    }
-
-    setEnemy(updatedEnemy);
-    setPlayerAnim('idle');
-    setActiveMoveType(null);
-    setActiveBuffs(prev => ({ ...prev, atk: false }));
-
-    // 2. 效果消息
-    const effectMessages = [];
-    if (damage > 0) {
-      if (multiplier > 1) effectMessages.push(t('superEffective'));
-      if (multiplier < 1 && multiplier > 0) effectMessages.push(t('notVeryEffective'));
-      if (multiplier === 0) effectMessages.push(t('noEffect'));
-    }
-    
-    if (effectMessages.length > 0) {
-      await addMessagesSequentially(effectMessages);
-    }
-
-    // 3. 伤害消息
-    if (damage > 0) {
-      await addMessagesSequentially([t('causedDamage').replace('{name}', getLocalized(player)).replace('{damage}', damage.toString())]);
-    }
-    
-    // 4. 处理附加效果 (异常状态和能力变化)
-    if (newEnemyHp > 0) {
-      const isTargetUser = move.target === 'user';
-      const targetPokemon = isTargetUser ? updatedTeam[0] : updatedEnemy;
-      const isEnemyTarget = !isTargetUser;
-
-      // 异常状态
-      if (move.ailment && !targetPokemon.status && Math.random() * 100 < (move.ailmentChance || 100)) {
-        targetPokemon.status = move.ailment;
-        if (isEnemyTarget) {
-          setEnemy({ ...targetPokemon });
-        } else {
-          updatedTeam[0] = { ...targetPokemon };
-          setPlayerTeam([...updatedTeam]);
-        }
-        await addMessagesSequentially([`${getLocalized(targetPokemon)} ${AILMENT_ZH[move.ailment] || move.ailment}了！`]);
-      }
-      
-      // 能力变化
-      if (move.statChanges) {
-        const newStatStages = { ...targetPokemon.statStages };
-        let changed = false;
-        for (const sc of move.statChanges) {
-          const statKey = sc.stat as keyof StatStages;
-          if (newStatStages[statKey] !== undefined) {
-            const oldStage = newStatStages[statKey];
-            const newStage = Math.max(-6, Math.min(6, oldStage + sc.change));
-            if (newStage !== oldStage) {
-              newStatStages[statKey] = newStage;
-              changed = true;
-              const changeText = sc.change > 0 ? '提升' : '下降';
-              const statName = STAT_ZH[sc.stat] || sc.stat;
-              await addMessagesSequentially([`${getLocalized(targetPokemon)} 的 ${statName} ${changeText}了！`]);
-            }
-          }
-        }
-        if (changed) {
-          targetPokemon.statStages = newStatStages;
-          if (isEnemyTarget) {
-            setEnemy({ ...targetPokemon });
-          } else {
-            updatedTeam[0] = { ...targetPokemon };
-            setPlayerTeam([...updatedTeam]);
-          }
-        }
-      }
-
-      // 畏缩 (这里简单处理，直接跳过对手回合)
-      if (Math.random() * 100 < (move.flinchChance || 0)) {
-        await addMessagesSequentially([`${getLocalized(updatedEnemy)} 畏缩了，无法动弹！`]);
-        // 畏缩只持续一回合，这里通过不切换 turn 来实现
-        setEnemyAnim('idle');
-        return; 
-      }
-    }
-
-    // 5. 状态回合结束伤害 (中毒, 灼伤)
-    if (newEnemyHp > 0 && (updatedEnemy.status === 'poison' || updatedEnemy.status === 'burn')) {
-      const statusDamage = Math.floor(updatedEnemy.maxHp / 8);
-      const finalEnemyHpStatus = Math.max(0, updatedEnemy.currentHp - statusDamage);
-      updatedEnemy.currentHp = finalEnemyHpStatus;
-      setEnemy({ ...updatedEnemy });
-      await addMessagesSequentially([`${getLocalized(updatedEnemy)} 受到了 ${AILMENT_ZH[updatedEnemy.status]} 伤害！`]);
-      
-      if (finalEnemyHpStatus <= 0) {
-        await addMessagesSequentially([t('fainted').replace('{name}', getLocalized(updatedEnemy))]);
-        setTimeout(() => winBattle(), 500);
-        return;
-      }
-    }
-
-    setEnemyAnim('idle');
-    
-    if (newEnemyHp <= 0) {
-      await addMessagesSequentially([t('fainted').replace('{name}', getLocalized(enemy))]);
-      setTimeout(() => winBattle(), 500);
-      return;
-    }
-
-    setTurn('ENEMY');
-    setBattleMenuTab('MAIN');
   };
 
-  const enemyTurn = useCallback(async () => {
-    if (!enemy || !playerTeam[0] || turn !== 'ENEMY' || isMessageProcessing) return;
+  const checkBerries = async (pokemon: GamePokemon, isPlayer: boolean) => {
+    if (pokemon.currentHp > 0 && pokemon.currentHp <= pokemon.maxHp / 4) {
+      // For simplicity, let's assume they might have a berry if they are a Gym leader or just random chance
+      if (pokemon.isGym || Math.random() < 0.3) {
+         const heal = Math.floor(pokemon.maxHp / 4);
+         pokemon.currentHp = Math.min(pokemon.maxHp, pokemon.currentHp + heal);
+         await addMessagesSequentially([`${getLocalized(pokemon)} 使用了 橙橙果 恢复了体力！`]);
+         if (isPlayer) setPlayerTeam(prev => [{ ...prev[0], currentHp: pokemon.currentHp }, ...prev.slice(1)]);
+         else setEnemy({ ...pokemon });
+      }
+    }
+  };
 
-    const player = playerTeam[0];
+  const setEnvironmentFromMove = async (move: Move) => {
+    const isPrimalWeather = ['heavy_rain', 'harsh_sunlight', 'strong_winds'].includes(weather);
+
+    // Weather moves
+    if (move.id === 'sunny-day' && !isPrimalWeather) { setWeather('sunny'); setWeatherTurns(5); await addMessagesSequentially([t('weather_sunny_start')]); }
+    if (move.id === 'rain-dance' && !isPrimalWeather) { setWeather('rainy'); setWeatherTurns(5); await addMessagesSequentially([t('weather_rainy_start')]); }
+    if (move.id === 'sandstorm' && !isPrimalWeather) { setWeather('sandstorm'); setWeatherTurns(5); await addMessagesSequentially([t('weather_sandstorm_start')]); }
+    if (move.id === 'snowscape' && !isPrimalWeather) { setWeather('snow'); setWeatherTurns(5); await addMessagesSequentially([t('weather_snow_start')]); }
     
+    // Primal Weathers (Triggered by specific moves for now)
+    if (move.id === 'origin-pulse') { setWeather('heavy_rain'); setWeatherTurns(-1); await addMessagesSequentially([t('weather_heavy_rain_start')]); }
+    if (move.id === 'precipice-blades') { setWeather('harsh_sunlight'); setWeatherTurns(-1); await addMessagesSequentially([t('weather_harsh_sunlight_start')]); }
+    if (move.id === 'dragon-ascent') { setWeather('strong_winds'); setWeatherTurns(-1); await addMessagesSequentially([t('weather_strong_winds_start')]); }
+
+    // Terrain moves
+    if (move.id === 'electric-terrain') { setTerrain('electric'); setTerrainTurns(5); await addMessagesSequentially([t('terrain_electric_start')]); }
+    if (move.id === 'grassy-terrain') { setTerrain('grassy'); setTerrainTurns(5); await addMessagesSequentially([t('terrain_grassy_start')]); }
+    if (move.id === 'psychic-terrain') { setTerrain('psychic'); setTerrainTurns(5); await addMessagesSequentially([t('terrain_psychic_start')]); }
+    if (move.id === 'misty-terrain') { setTerrain('misty'); setTerrainTurns(5); await addMessagesSequentially([t('terrain_misty_start')]); }
+
+    // Dimension moves
+    if (move.id === 'trick-room') { 
+      if (dimension === 'trick_room') { setDimension('none'); setDimensionTurns(0); await addMessagesSequentially([t('dimension_trick_room_end')]); }
+      else { setDimension('trick_room'); setDimensionTurns(5); await addMessagesSequentially([t('dimension_trick_room_start')]); }
+    }
+    if (move.id === 'magic-room') {
+      if (dimension === 'magic_room') { setDimension('none'); setDimensionTurns(0); await addMessagesSequentially([t('dimension_magic_room_end')]); }
+      else { setDimension('magic_room'); setDimensionTurns(5); await addMessagesSequentially([t('dimension_magic_room_start')]); }
+    }
+    if (move.id === 'wonder-room') {
+      if (dimension === 'wonder_room') { setDimension('none'); setDimensionTurns(0); await addMessagesSequentially([t('dimension_wonder_room_end')]); }
+      else { setDimension('wonder_room'); setDimensionTurns(5); await addMessagesSequentially([t('dimension_wonder_room_start')]); }
+    }
+  };
+
+  const decrementEnvironments = async () => {
+    if (weatherTurns > 0) {
+      const nextTurns = weatherTurns - 1;
+      setWeatherTurns(nextTurns);
+      if (nextTurns === 0) {
+        setWeather('none');
+        await addMessagesSequentially([t('weather_end')]);
+      }
+    }
+    // Primal weathers (turns = -1) do not decrement
+    if (terrainTurns > 0) {
+      const nextTurns = terrainTurns - 1;
+      setTerrainTurns(nextTurns);
+      if (nextTurns === 0) {
+        setTerrain('none');
+        await addMessagesSequentially([t('terrain_end')]);
+      }
+    }
+    if (dimensionTurns > 0) {
+      const nextTurns = dimensionTurns - 1;
+      setDimensionTurns(nextTurns);
+      if (nextTurns === 0) {
+        setDimension('none');
+        await addMessagesSequentially([t('dimension_end')]);
+      }
+    }
+  };
+
+  const executeAttack = async (move: Move, attacker: GamePokemon, defender: GamePokemon, isPlayerAttacker: boolean) => {
+    // Clone to avoid direct mutation
+    const currentAttacker = { 
+      ...attacker, 
+      statStages: { ...attacker.statStages },
+      volatileStatus: attacker.volatileStatus ? [...attacker.volatileStatus] : undefined,
+      selectedMoves: attacker.selectedMoves.map(m => ({ ...m }))
+    };
+    const currentDefender = { 
+      ...defender, 
+      statStages: { ...defender.statStages },
+      volatileStatus: defender.volatileStatus ? [...defender.volatileStatus] : undefined,
+      selectedMoves: defender.selectedMoves.map(m => ({ ...m }))
+    };
+
+    const attackerName = getLocalized(currentAttacker);
+    const defenderName = getLocalized(currentDefender);
+
+    const updateStates = (a: GamePokemon, d: GamePokemon) => {
+      if (isPlayerAttacker) {
+        setPlayerTeam(prev => [a, ...prev.slice(1)]);
+        setEnemy(d);
+      } else {
+        setEnemy(a);
+        setPlayerTeam(prev => [d, ...prev.slice(1)]);
+      }
+    };
+
     // 检查异常状态限制
-    if (enemy.status === 'sleep') {
-      await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 正在呼呼大睡...`]);
-      if (Math.random() < 0.33) {
-        setEnemy({ ...enemy, status: undefined });
-        await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 醒过来了！`]);
+    if (currentAttacker.status === 'sleep') {
+      await addMessagesSequentially([`${attackerName} 正在呼呼大睡...`]);
+      const turns = (currentAttacker.statusTurns || 0) + 1;
+      if (turns >= 3 || Math.random() < 0.33) {
+        currentAttacker.status = undefined;
+        currentAttacker.statusTurns = 0;
+        updateStates(currentAttacker, currentDefender);
+        await addMessagesSequentially([`${attackerName} 醒过来了！`]);
       } else {
-        setTurn('PLAYER');
-        return;
+        currentAttacker.statusTurns = turns;
+        updateStates(currentAttacker, currentDefender);
+        return { success: false, attacker: currentAttacker, defender: currentDefender };
       }
     }
-    if (enemy.status === 'freeze') {
-      await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 冻得严严实实...`]);
-      if (Math.random() < 0.2) {
-        setEnemy({ ...enemy, status: undefined });
-        await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 的冰融化了！`]);
-      } else {
-        setTurn('PLAYER');
-        return;
-      }
+    if (currentAttacker.status === 'freeze') {
+      await addMessagesSequentially([`${attackerName} 冻得严严实实...`]);
+      if (Math.random() < 0.2 || move.type === 'fire') {
+        currentAttacker.status = undefined;
+        updateStates(currentAttacker, currentDefender);
+        await addMessagesSequentially([`${attackerName} 的冰融化了！`]);
+      } else return { success: false, attacker: currentAttacker, defender: currentDefender };
     }
-    if (enemy.status === 'paralysis' && Math.random() < 0.25) {
-      await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 麻痹了，无法动弹！`]);
-      setTurn('PLAYER');
-      return;
+    if (currentAttacker.status === 'paralysis' && Math.random() < 0.25) {
+      await addMessagesSequentially([`${attackerName} 麻痹了，无法动弹！`]);
+      return { success: false, attacker: currentAttacker, defender: currentDefender };
     }
 
-    const move = enemy.selectedMoves[Math.floor(Math.random() * enemy.selectedMoves.length)];
+    // Check Confusion
+    if (currentAttacker.volatileStatus?.includes('confusion')) {
+      await addMessagesSequentially([`${attackerName} 混乱了！`]);
+      if (Math.random() < 0.5) {
+        await addMessagesSequentially([`它在混乱中攻击了自己！`]);
+        // Self damage: 40 power physical move
+        const selfDamage = Math.floor(((2 * currentAttacker.level / 5 + 2) * 40 * currentAttacker.calculatedStats.attack / currentAttacker.calculatedStats.defense) / 50) + 2;
+        currentAttacker.currentHp = Math.max(0, currentAttacker.currentHp - selfDamage);
+        updateStates(currentAttacker, currentDefender);
+        if (currentAttacker.currentHp <= 0) {
+          await addMessagesSequentially([t('fainted').replace('{name}', attackerName)]);
+          return { success: 'FAINTED', attacker: currentAttacker, defender: currentDefender };
+        }
+        return { success: false, attacker: currentAttacker, defender: currentDefender };
+      }
+    }
+
+    // Check Infatuation
+    if (currentAttacker.volatileStatus?.includes('infatuation')) {
+      await addMessagesSequentially([`${attackerName} 陷入了爱河！`]);
+      if (Math.random() < 0.5) {
+        await addMessagesSequentially([`${attackerName} 因为爱而无法攻击！`]);
+        return { success: false, attacker: currentAttacker, defender: currentDefender };
+      }
+    }
+
+    // Check Protect
+    if (currentDefender.volatileStatus?.includes('protect')) {
+      await addMessagesSequentially([`${defenderName} 守住了！`]);
+      return { success: false, attacker: currentAttacker, defender: currentDefender };
+    }
+
     setActiveMoveType(move.type);
-    setEnemyAnim('attack');
-    
-    // 1. 对手使用技能
-    await addMessagesSequentially([t('enemyUsedMove').replace('{name}', getLocalized(enemy)).replace('{move}', getLocalized(move))]);
+    if (isPlayerAttacker) setPlayerAnim('attack');
+    else setEnemyAnim('attack');
 
-    const { damage, multiplier, isMiss, isCrit } = calculateDamage(move, enemy, player, enemyBuffs.atk, activeBuffs.def);
-    
-    if (isMiss) {
-      await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 的攻击落空了！`]);
-      setEnemyAnim('idle');
+    await addMessagesSequentially([
+      isPlayerAttacker 
+        ? t('usedMove').replace('{name}', attackerName).replace('{move}', getLocalized(move))
+        : t('enemyUsedMove').replace('{name}', attackerName).replace('{move}', getLocalized(move))
+    ]);
+
+    // Update PP
+    if (move.id !== 'struggle') {
+      currentAttacker.selectedMoves = currentAttacker.selectedMoves.map(m => 
+        m.id === move.id ? { ...m, currentPP: Math.max(0, (m.currentPP || 1) - 1) } : m
+      );
+      updateStates(currentAttacker, currentDefender);
+    }
+
+    // Psychic Terrain: Block priority moves from grounded attackers
+    if (terrain === 'psychic' && isGrounded(currentDefender) && move.priority && move.priority > 0) {
+      await addMessagesSequentially([t('terrain_psychic_block').replace('{name}', attackerName)]);
+      if (isPlayerAttacker) setPlayerAnim('idle');
+      else setEnemyAnim('idle');
       setActiveMoveType(null);
-      setTurn('PLAYER');
-      return;
+      return { success: false, attacker: currentAttacker, defender: currentDefender };
     }
 
-    if (isCrit) {
-      await addMessagesSequentially(['击中了要害！']);
+    const { damage, multiplier, isMiss, isCrit } = calculateDamage(
+      move, 
+      currentAttacker, 
+      currentDefender, 
+      isPlayerAttacker ? activeBuffs.atk : enemyBuffs.atk, 
+      isPlayerAttacker ? enemyBuffs.def : activeBuffs.def
+    );
+
+    if (isMiss) {
+      await addMessagesSequentially([`${attackerName} 的攻击落空了！`]);
+      if (isPlayerAttacker) setPlayerAnim('idle');
+      else setEnemyAnim('idle');
+      setActiveMoveType(null);
+      return { success: false, attacker: currentAttacker, defender: currentDefender };
     }
 
-    const newPlayerHp = Math.max(0, player.currentHp - damage);
-    
+    if (isCrit) await addMessagesSequentially(['击中了要害！']);
+
+    if (damage < 0) {
+      await addMessagesSequentially([`${defenderName} 吸收了攻击并恢复了体力！`]);
+    }
+
+    let newDefenderHp = Math.max(0, Math.min(currentDefender.maxHp, currentDefender.currentHp - damage));
+
+    // Focus Sash
+    if (dimension !== 'magic_room' && newDefenderHp === 0 && currentDefender.currentHp === currentDefender.maxHp && currentDefender.heldItem?.id === 'focus_sash') {
+      newDefenderHp = 1;
+      await addMessagesSequentially([`${defenderName} 凭借气势披带撑住了！`]);
+      currentDefender.heldItem = undefined; // Consume
+    }
+
     if (damage > 0) {
-      setPlayerAnim('hit');
-    }
-    const updatedTeam = [...playerTeam];
-    let updatedPlayer = { ...player, currentHp: newPlayerHp };
-    
-    // 处理吸血和回血
-    let enemyHpChange = 0;
-    if (move.drain !== 0 && damage > 0) {
-      enemyHpChange += Math.floor(damage * move.drain / 100);
-    }
-    if (move.healing !== 0) {
-      enemyHpChange += Math.floor(enemy.maxHp * move.healing / 100);
-    }
-    
-    const finalEnemyHp = Math.max(0, Math.min(enemy.maxHp, enemy.currentHp + enemyHpChange));
-    setEnemy({ ...enemy, currentHp: finalEnemyHp });
-
-    if (enemyHpChange > 0) {
-      await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 恢复了体力！`]);
-    } else if (enemyHpChange < 0) {
-      await addMessagesSequentially([`对手的 ${getLocalized(enemy)} 受到了反作用力伤害！`]);
+      if (isPlayerAttacker) setEnemyAnim('hit');
+      else setPlayerAnim('hit');
     }
 
-    // 5. 天气伤害
-    if (weather === 'sandstorm' || weather === 'hail') {
-      const isRockGroundSteel = (p: GamePokemon) => p.types.some(t => ['rock', 'ground', 'steel'].includes(t.type.name));
-      const isIce = (p: GamePokemon) => p.types.some(t => t.type.name === 'ice');
-      
-      if (weather === 'sandstorm' && !isRockGroundSteel(updatedPlayer) && newPlayerHp > 0) {
-        const weatherDmg = Math.floor(updatedPlayer.maxHp / 16);
-        updatedPlayer.currentHp = Math.max(0, updatedPlayer.currentHp - weatherDmg);
-        await addMessagesSequentially([t('weatherDamage').replace('{name}', getLocalized(updatedPlayer))]);
-      } else if (weather === 'hail' && !isIce(updatedPlayer) && newPlayerHp > 0) {
-        const weatherDmg = Math.floor(updatedPlayer.maxHp / 16);
-        updatedPlayer.currentHp = Math.max(0, updatedPlayer.currentHp - weatherDmg);
-        await addMessagesSequentially([t('weatherDamage').replace('{name}', getLocalized(updatedPlayer))]);
-      }
+    // Update defender HP
+    currentDefender.currentHp = newDefenderHp;
+    updateStates(currentAttacker, currentDefender);
+
+    await checkBerries(currentDefender, !isPlayerAttacker);
+
+    // Handle Drain/Healing
+    let attackerHpChange = 0;
+    if (move.id === 'struggle') {
+      attackerHpChange -= Math.floor(currentAttacker.maxHp / 4);
+    } else if (move.drain !== 0 && damage > 0) {
+      attackerHpChange += Math.floor(damage * move.drain / 100);
+    }
+    if (move.healing !== 0) attackerHpChange += Math.floor(currentAttacker.maxHp * move.healing / 100);
+
+    if (attackerHpChange !== 0) {
+      currentAttacker.currentHp = Math.max(0, Math.min(currentAttacker.maxHp, currentAttacker.currentHp + attackerHpChange));
+      updateStates(currentAttacker, currentDefender);
+      await addMessagesSequentially([attackerHpChange > 0 ? `${attackerName} 恢复了体力！` : `${attackerName} 受到了反作用力伤害！`]);
     }
 
-    updatedTeam[0] = updatedPlayer;
-    setPlayerTeam(updatedTeam);
-    setEnemyAnim('idle');
-    setActiveMoveType(null);
-    setActiveBuffs(prev => ({ ...prev, def: false }));
-
-    // 2. 效果消息
+    // Effect messages
     const effectMessages = [];
     if (damage > 0) {
       if (multiplier > 1) effectMessages.push(t('superEffective'));
       if (multiplier < 1 && multiplier > 0) effectMessages.push(t('notVeryEffective'));
       if (multiplier === 0) effectMessages.push(t('noEffect'));
-    }
-    
-    if (effectMessages.length > 0) {
       await addMessagesSequentially(effectMessages);
+      await addMessagesSequentially([t('causedDamage').replace('{name}', attackerName).replace('{damage}', damage.toString())]);
     }
 
-    // 3. 伤害消息
-    if (damage > 0) {
-      await addMessagesSequentially([t('enemyCausedDamage').replace('{name}', getLocalized(enemy)).replace('{damage}', damage.toString())]);
+    // Set environment
+    await setEnvironmentFromMove(move);
+
+    // Handle Protect move
+    if (move.id === 'protect') {
+      currentAttacker.volatileStatus = [...(currentAttacker.volatileStatus || []), 'protect'];
+      updateStates(currentAttacker, currentDefender);
+      await addMessagesSequentially([`${attackerName} 进入了守住状态！`]);
     }
 
-    // 4. 附加效果
-    if (newPlayerHp > 0) {
+    // Handle Ailments and Stat Changes
+    if (currentDefender.currentHp > 0) {
       const isTargetUser = move.target === 'user';
-      const targetPokemon = isTargetUser ? { ...enemy, currentHp: finalEnemyHp } : updatedPlayer;
-      const isPlayerTarget = !isTargetUser;
+      const target = isTargetUser ? currentAttacker : currentDefender;
+      const isPlayerTarget = (isPlayerAttacker && isTargetUser) || (!isPlayerAttacker && !isTargetUser);
 
-      // 异常状态
-      if (move.ailment && !targetPokemon.status && Math.random() * 100 < (move.ailmentChance || 100)) {
-        targetPokemon.status = move.ailment;
-        if (isPlayerTarget) {
-          updatedTeam[0] = { ...targetPokemon };
-          setPlayerTeam([...updatedTeam]);
+      if (move.ailment && !target.status && Math.random() * 100 < (move.ailmentChance || 100)) {
+        const targetTypes = target.types.map(t => t.type.name);
+        let immune = false;
+        if (move.ailment === 'burn' && targetTypes.includes('fire')) immune = true;
+        if (move.ailment === 'paralysis' && targetTypes.includes('electric')) immune = true;
+        if (move.ailment === 'freeze' && targetTypes.includes('ice')) immune = true;
+        if ((move.ailment === 'poison' || move.ailment === 'toxic') && (targetTypes.includes('poison') || targetTypes.includes('steel'))) immune = true;
+        
+        if (immune) {
+          // No message needed usually, just fails
+        } else if (terrain === 'misty' && isGrounded(target)) {
+          await addMessagesSequentially([t('terrain_misty_block').replace('{name}', getLocalized(target))]);
+        } else if (move.ailment === 'sleep' && terrain === 'electric' && isGrounded(target)) {
+          await addMessagesSequentially([t('terrain_electric_block').replace('{name}', getLocalized(target))]);
         } else {
-          setEnemy({ ...targetPokemon });
+          target.status = move.ailment;
+          updateStates(currentAttacker, currentDefender);
+          await addMessagesSequentially([`${getLocalized(target)} ${AILMENT_ZH[move.ailment] || move.ailment}了！`]);
         }
-        await addMessagesSequentially([`${getLocalized(targetPokemon)} ${AILMENT_ZH[move.ailment] || move.ailment}了！`]);
       }
-      
-      // 能力变化
+
       if (move.statChanges) {
-        const newStatStages = { ...targetPokemon.statStages };
+        const newStatStages = { ...target.statStages };
         let changed = false;
+        const isContrary = target.abilities.some(a => a.ability.name === 'contrary');
         for (const sc of move.statChanges) {
           const statKey = sc.stat as keyof StatStages;
-          if (newStatStages[statKey] !== undefined) {
-            const oldStage = newStatStages[statKey];
-            const newStage = Math.max(-6, Math.min(6, oldStage + sc.change));
-            if (newStage !== oldStage) {
-              newStatStages[statKey] = newStage;
-              changed = true;
-              const changeText = sc.change > 0 ? '提升' : '下降';
-              const statName = STAT_ZH[sc.stat] || sc.stat;
-              await addMessagesSequentially([`${getLocalized(targetPokemon)} 的 ${statName} ${changeText}了！`]);
-            }
+          const oldStage = newStatStages[statKey];
+          const change = isContrary ? -sc.change : sc.change;
+          const newStage = Math.max(-6, Math.min(6, oldStage + change));
+          if (newStage !== oldStage) {
+            newStatStages[statKey] = newStage;
+            changed = true;
+            await addMessagesSequentially([`${getLocalized(target)} 的 ${STAT_ZH[sc.stat] || sc.stat} ${change > 0 ? '提升' : '下降'}了！`]);
           }
         }
         if (changed) {
-          targetPokemon.statStages = newStatStages;
-          if (isPlayerTarget) {
-            updatedTeam[0] = { ...targetPokemon };
-            setPlayerTeam([...updatedTeam]);
-          } else {
-            setEnemy({ ...targetPokemon });
+          target.statStages = newStatStages;
+          updateStates(currentAttacker, currentDefender);
+        }
+      }
+
+      if (Math.random() * 100 < (move.flinchChance || 0)) {
+        await addMessagesSequentially([`${defenderName} 畏缩了，无法动弹！`]);
+        return { success: 'FLINCH', attacker: currentAttacker, defender: currentDefender };
+      }
+    }
+
+    // Contact abilities
+    if (damage > 0 && move.damage_class === 'physical' && currentDefender.currentHp > 0 && !currentAttacker.status) {
+      const defAbility = currentDefender.abilities[0]?.ability.name;
+      let ailment: string | undefined;
+      if (defAbility === 'static' && Math.random() < 0.3) ailment = 'paralysis';
+      if (defAbility === 'flame-body' && Math.random() < 0.3) ailment = 'burn';
+      if (defAbility === 'poison-point' && Math.random() < 0.3) ailment = 'poison';
+
+      if (ailment) {
+        currentAttacker.status = ailment;
+        updateStates(currentAttacker, currentDefender);
+        await addMessagesSequentially([`${attackerName} 触碰了对方，${AILMENT_ZH[ailment] || ailment}了！`]);
+      }
+    }
+
+    if (isPlayerAttacker) setPlayerAnim('idle');
+    else setEnemyAnim('idle');
+    setActiveMoveType(null);
+
+    if (currentDefender.currentHp <= 0) {
+      await addMessagesSequentially([t('fainted').replace('{name}', defenderName)]);
+      return { success: 'FAINTED', attacker: currentAttacker, defender: currentDefender };
+    }
+
+    return { success: true, attacker: currentAttacker, defender: currentDefender };
+  };
+
+  const handleAttack = async (playerMove: Move) => {
+    if (!enemy || gameState !== 'BATTLE' || turn !== 'PLAYER' || isMessageProcessing) return;
+
+    let currentPlayer = playerTeam[0];
+    let currentEnemy = enemy;
+    
+    // Check if player must struggle
+    let actualPlayerMove = playerMove;
+    if (playerMove.currentPP === 0) {
+      actualPlayerMove = STRUGGLE_MOVE;
+    }
+
+    // Enemy move selection
+    const availableEnemyMoves = currentEnemy.selectedMoves.filter(m => (m.currentPP || 0) > 0);
+    const enemyMove = availableEnemyMoves.length > 0 
+      ? availableEnemyMoves[Math.floor(Math.random() * availableEnemyMoves.length)]
+      : STRUGGLE_MOVE;
+
+    const getEffectiveSpeed = (p: GamePokemon) => {
+      let speed = p.calculatedStats.speed * (STAT_STAGE_MODIFIERS[p.statStages.speed as keyof typeof STAT_STAGE_MODIFIERS] || 1);
+      if (p.status === 'paralysis') speed *= 0.5;
+      
+      const ability = p.abilities[0]?.ability.name;
+      if (ability === 'chlorophyll' && (weather === 'sunny' || weather === 'harsh_sunlight')) speed *= 2;
+      if (ability === 'swift-swim' && (weather === 'rainy' || weather === 'heavy_rain')) speed *= 2;
+      
+      return speed;
+    };
+
+    // Determine turn order
+    let playerGoesFirst = true;
+    const pSpeed = getEffectiveSpeed(currentPlayer);
+    const eSpeed = getEffectiveSpeed(currentEnemy);
+    const pPriority = actualPlayerMove.priority || 0;
+    const ePriority = enemyMove.priority || 0;
+
+    if (pPriority > ePriority) playerGoesFirst = true;
+    else if (ePriority > pPriority) playerGoesFirst = false;
+    else {
+      if (dimension === 'trick_room') playerGoesFirst = pSpeed < eSpeed;
+      else playerGoesFirst = pSpeed >= eSpeed;
+    }
+
+    const executeTurn = async (isPlayer: boolean, move: Move, attacker: GamePokemon, defender: GamePokemon) => {
+      if (attacker.currentHp <= 0) return { success: 'SKIP', attacker, defender };
+      return await executeAttack(move, attacker, defender, isPlayer);
+    };
+
+    if (playerGoesFirst) {
+      const res1 = await executeTurn(true, actualPlayerMove, currentPlayer, currentEnemy);
+      currentPlayer = res1.attacker;
+      currentEnemy = res1.defender;
+      if (res1.success === 'FAINTED') {
+        if (currentPlayer.abilities.some(a => a.ability.name === 'moxie')) {
+          currentPlayer.statStages.attack = Math.min(6, currentPlayer.statStages.attack + 1);
+          setPlayerTeam(prev => [{ ...prev[0], statStages: currentPlayer.statStages }, ...prev.slice(1)]);
+          await addMessagesSequentially([`${getLocalized(currentPlayer)} 的自信过度提升了攻击！`]);
+        }
+      }
+      if (res1.success !== 'FAINTED' && res1.success !== 'FLINCH' && currentEnemy.currentHp > 0) {
+        const res2 = await executeTurn(false, enemyMove, currentEnemy, currentPlayer);
+        currentEnemy = res2.attacker;
+        currentPlayer = res2.defender;
+        if (res2.success === 'FAINTED') {
+          if (currentEnemy.abilities.some(a => a.ability.name === 'moxie')) {
+            currentEnemy.statStages.attack = Math.min(6, currentEnemy.statStages.attack + 1);
+            setEnemy({ ...currentEnemy });
+            await addMessagesSequentially([`${getLocalized(currentEnemy)} 的自信过度提升了攻击！`]);
           }
         }
       }
-
-      // 畏缩
-      if (Math.random() * 100 < (move.flinchChance || 0)) {
-        await addMessagesSequentially([`${getLocalized(updatedPlayer)} 畏缩了，无法动弹！`]);
-        setPlayerAnim('idle');
-        return;
-      }
-    }
-
-    // 5. 状态回合结束伤害
-    if (updatedPlayer.currentHp > 0 && (updatedPlayer.status === 'poison' || updatedPlayer.status === 'burn')) {
-      const statusDamage = Math.floor(updatedPlayer.maxHp / 8);
-      const finalPlayerHpStatus = Math.max(0, updatedPlayer.currentHp - statusDamage);
-      updatedPlayer.currentHp = finalPlayerHpStatus;
-      updatedTeam[0] = { ...updatedPlayer };
-      setPlayerTeam([...updatedTeam]);
-      await addMessagesSequentially([`${getLocalized(updatedPlayer)} 受到了 ${AILMENT_ZH[updatedPlayer.status]} 伤害！`]);
-      
-      if (finalPlayerHpStatus <= 0) {
-        await addMessagesSequentially([t('fainted').replace('{name}', getLocalized(updatedPlayer))]);
-        
-        const aliveIdx = updatedTeam.findIndex(p => p.currentHp > 0);
-        if (aliveIdx === -1) {
-          setTimeout(() => setGameState('GAMEOVER'), 500);
-        } else {
-          const newTeam = [...updatedTeam];
-          const temp = newTeam[0];
-          newTeam[0] = newTeam[aliveIdx];
-          newTeam[aliveIdx] = temp;
-          setPlayerTeam(newTeam);
-          await addMessagesSequentially([t('sentOut').replace('{name}', getLocalized(newTeam[0]))]);
-          setTurn('PLAYER');
-          setBattleMenuTab('MAIN');
+    } else {
+      const res1 = await executeTurn(false, enemyMove, currentEnemy, currentPlayer);
+      currentEnemy = res1.attacker;
+      currentPlayer = res1.defender;
+      if (res1.success === 'FAINTED') {
+        if (currentEnemy.abilities.some(a => a.ability.name === 'moxie')) {
+          currentEnemy.statStages.attack = Math.min(6, currentEnemy.statStages.attack + 1);
+          setEnemy({ ...currentEnemy });
+          await addMessagesSequentially([`${getLocalized(currentEnemy)} 的自信过度提升了攻击！`]);
         }
-        return;
+      }
+      if (res1.success !== 'FAINTED' && res1.success !== 'FLINCH' && currentPlayer.currentHp > 0) {
+        const res2 = await executeTurn(true, actualPlayerMove, currentPlayer, currentEnemy);
+        currentPlayer = res2.attacker;
+        currentEnemy = res2.defender;
+        if (res2.success === 'FAINTED') {
+          if (currentPlayer.abilities.some(a => a.ability.name === 'moxie')) {
+            currentPlayer.statStages.attack = Math.min(6, currentPlayer.statStages.attack + 1);
+            setPlayerTeam(prev => [{ ...prev[0], statStages: currentPlayer.statStages }, ...prev.slice(1)]);
+            await addMessagesSequentially([`${getLocalized(currentPlayer)} 的自信过度提升了攻击！`]);
+          }
+        }
       }
     }
 
-    setPlayerAnim('idle');
-    
-    if (newPlayerHp <= 0) {
-      await addMessagesSequentially([t('fainted').replace('{name}', getLocalized(player))]);
+    // End of turn effects
+    if (currentPlayer.currentHp > 0 && currentEnemy.currentHp > 0) {
+      // Weather damage
+      if (weather === 'sandstorm') {
+        if (!isRockGroundSteel(currentPlayer)) {
+          const d = Math.floor(currentPlayer.maxHp / 16);
+          currentPlayer.currentHp = Math.max(0, currentPlayer.currentHp - d);
+          setPlayerTeam(prev => [{ ...prev[0], currentHp: currentPlayer.currentHp }, ...prev.slice(1)]);
+          await addMessagesSequentially([t('weatherDamage').replace('{name}', getLocalized(currentPlayer))]);
+        }
+        if (currentEnemy.currentHp > 0 && !isRockGroundSteel(currentEnemy)) {
+          const d = Math.floor(currentEnemy.maxHp / 16);
+          currentEnemy.currentHp = Math.max(0, currentEnemy.currentHp - d);
+          setEnemy({ ...currentEnemy });
+          await addMessagesSequentially([t('weatherDamage').replace('{name}', getLocalized(currentEnemy))]);
+        }
+      }
+      // Terrain heal
+      if (terrain === 'grassy') {
+        if (isGrounded(currentPlayer) && currentPlayer.currentHp < currentPlayer.maxHp) {
+          const h = Math.floor(currentPlayer.maxHp / 16);
+          currentPlayer.currentHp = Math.min(currentPlayer.maxHp, currentPlayer.currentHp + h);
+          setPlayerTeam(prev => [{ ...prev[0], currentHp: currentPlayer.currentHp }, ...prev.slice(1)]);
+          await addMessagesSequentially([t('terrain_grassy_heal').replace('{name}', getLocalized(currentPlayer))]);
+        }
+        if (currentEnemy.currentHp > 0 && isGrounded(currentEnemy) && currentEnemy.currentHp < currentEnemy.maxHp) {
+          const h = Math.floor(currentEnemy.maxHp / 16);
+          currentEnemy.currentHp = Math.min(currentEnemy.maxHp, currentEnemy.currentHp + h);
+          setEnemy({ ...currentEnemy });
+          await addMessagesSequentially([t('terrain_grassy_heal').replace('{name}', getLocalized(currentEnemy))]);
+        }
+      }
+      // Held item: Leftovers
+      if (dimension !== 'magic_room' && currentPlayer.heldItem?.id === 'leftovers' && currentPlayer.currentHp < currentPlayer.maxHp) {
+        const h = Math.floor(currentPlayer.maxHp / 16);
+        currentPlayer.currentHp = Math.min(currentPlayer.maxHp, currentPlayer.currentHp + h);
+        setPlayerTeam(prev => [{ ...prev[0], currentHp: currentPlayer.currentHp }, ...prev.slice(1)]);
+        await addMessagesSequentially([`${getLocalized(currentPlayer)} 的吃剩的东西恢复了体力！`]);
+      }
+      if (dimension !== 'magic_room' && currentEnemy.currentHp > 0 && currentEnemy.heldItem?.id === 'leftovers' && currentEnemy.currentHp < currentEnemy.maxHp) {
+        const h = Math.floor(currentEnemy.maxHp / 16);
+        currentEnemy.currentHp = Math.min(currentEnemy.maxHp, currentEnemy.currentHp + h);
+        setEnemy({ ...currentEnemy });
+        await addMessagesSequentially([`${getLocalized(currentEnemy)} 的吃剩的东西恢复了体力！`]);
+      }
+      // Leech Seed
+      if (currentEnemy.volatileStatus?.includes('leech_seed')) {
+        const d = Math.floor(currentEnemy.maxHp / 8);
+        currentEnemy.currentHp = Math.max(0, currentEnemy.currentHp - d);
+        currentPlayer.currentHp = Math.min(currentPlayer.maxHp, currentPlayer.currentHp + d);
+        setPlayerTeam(prev => [{ ...prev[0], currentHp: currentPlayer.currentHp }, ...prev.slice(1)]);
+        setEnemy({ ...currentEnemy });
+        await addMessagesSequentially([`${getLocalized(currentEnemy)} 的种子正在吸收体力！`]);
+      }
+      if (currentPlayer.volatileStatus?.includes('leech_seed')) {
+        const d = Math.floor(currentPlayer.maxHp / 8);
+        currentPlayer.currentHp = Math.max(0, currentPlayer.currentHp - d);
+        currentEnemy.currentHp = Math.min(currentEnemy.maxHp, currentEnemy.currentHp + d);
+        setPlayerTeam(prev => [{ ...prev[0], currentHp: currentPlayer.currentHp }, ...prev.slice(1)]);
+        setEnemy({ ...currentEnemy });
+        await addMessagesSequentially([`${getLocalized(currentPlayer)} 的种子正在吸收体力！`]);
+      }
+
+      // Status damage
+      const handleStatusDmg = async (poke: GamePokemon, isPlayer: boolean) => {
+        if (poke.status === 'poison' || poke.status === 'burn' || poke.status === 'toxic') {
+          let d = Math.floor(poke.maxHp / 8);
+          if (poke.status === 'toxic') {
+            const turns = (poke.statusTurns || 0) + 1;
+            d = Math.floor(poke.maxHp * turns / 16);
+            poke.statusTurns = turns;
+          }
+          const newHp = Math.max(0, poke.currentHp - d);
+          poke.currentHp = newHp;
+          if (isPlayer) setPlayerTeam(prev => [{ ...prev[0], currentHp: newHp, statusTurns: poke.statusTurns }, ...prev.slice(1)]);
+          else setEnemy({ ...poke });
+          await addMessagesSequentially([`${getLocalized(poke)} 受到了 ${AILMENT_ZH[poke.status] || poke.status} 伤害！`]);
+          return newHp <= 0;
+        }
+        return false;
+      };
       
-      const aliveIdx = updatedTeam.findIndex(p => p.currentHp > 0);
-      if (aliveIdx === -1) {
-        setTimeout(() => setGameState('GAMEOVER'), 500);
-      } else {
-        // 自动切换
-        const newTeam = [...updatedTeam];
-        const temp = newTeam[0];
-        newTeam[0] = newTeam[aliveIdx];
-        newTeam[aliveIdx] = temp;
-        setPlayerTeam(newTeam);
-        await addMessagesSequentially([t('sentOut').replace('{name}', getLocalized(newTeam[0]))]);
-        setTurn('PLAYER');
-        setBattleMenuTab('MAIN');
+      const pFainted = await handleStatusDmg(currentPlayer, true);
+      const eFainted = await handleStatusDmg(currentEnemy, false);
+
+      // Clear volatile statuses
+      currentPlayer.volatileStatus = currentPlayer.volatileStatus?.filter(s => s !== 'protect');
+      currentEnemy.volatileStatus = currentEnemy.volatileStatus?.filter(s => s !== 'protect');
+      setPlayerTeam(prev => [{ ...prev[0], volatileStatus: currentPlayer.volatileStatus }, ...prev.slice(1)]);
+      setEnemy({ ...currentEnemy });
+
+      if (pFainted) {
+        await addMessagesSequentially([t('fainted').replace('{name}', getLocalized(currentPlayer))]);
       }
-      return;
+      if (eFainted) {
+        await addMessagesSequentially([t('fainted').replace('{name}', getLocalized(currentEnemy))]);
+      }
     }
 
-    setTurn('PLAYER');
-    setBattleMenuTab('MAIN');
-  }, [enemy, playerTeam, turn, enemyBuffs, activeBuffs, isMessageProcessing, gameState]);
-
-  useEffect(() => {
-    if (turn === 'ENEMY' && gameState === 'BATTLE') {
-      enemyTurn();
+    if (currentEnemy.currentHp <= 0) {
+      winBattle();
+    } else if (currentPlayer.currentHp <= 0) {
+      if (playerTeam.every(p => p.currentHp <= 0)) {
+        setGameState('GAMEOVER');
+      } else {
+        setIsFaintedReplacement(true);
+        setBattleMenuTab('POKEMON');
+      }
+    } else {
+      await decrementEnvironments();
+      setTurn('PLAYER');
+      setBattleMenuTab('MAIN');
     }
-  }, [turn, gameState, enemyTurn]);
+  };
+
+  const winBattle = async (isCatch = false) => {
+    setLoading(true);
+    try {
+      const isGym = stage % 5 === 0;
+      let earnedCoins = 100 + Math.floor(Math.random() * 201);
+      if (isGym) earnedCoins *= 3;
+      
+      setCoins(prev => prev + earnedCoins);
+      setRerollCount(0);
+
+      const newRewards = await generateRewardSet();
+
+      setRewardChoiceMade(false);
+      setRewards(newRewards);
+      setGameState('REWARD');
+      
+      const winMsg = isCatch 
+        ? t('catchSuccess').replace('{name}', getLocalized(enemy!))
+        : t('winBattle').replace('{name}', getLocalized(enemy!));
+      
+      await addMessagesSequentially([winMsg]);
+      
+      // 关卡进度
+      setStage(prev => prev + 1);
+      
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const calculateDamage = (move: Move, attacker: GamePokemon, defender: GamePokemon, atkBuff: boolean, defBuff: boolean) => {
     if (move.damage_class === 'status') {
       return { damage: 0, multiplier: 1, isMiss: false, isCrit: false };
+    }
+
+    // Fixed damage moves
+    if (move.id === 'night-shade' || move.id === 'seismic-toss') {
+      return { damage: attacker.level, multiplier: 1, isMiss: false, isCrit: false };
+    }
+    if (move.id === 'dragon-rage') {
+      return { damage: 40, multiplier: 1, isMiss: false, isCrit: false };
+    }
+    if (move.id === 'sonic-boom') {
+      return { damage: 20, multiplier: 1, isMiss: false, isCrit: false };
     }
 
     const basePower = move.power || 40;
@@ -1478,38 +1804,90 @@ export default function App() {
     let atk = 50;
     let def = 50;
     
+    // Wonder Room: Swap Def and SpDef
+    const defStat = dimension === 'wonder_room' ? defender.calculatedStats.spDef : defender.calculatedStats.defense;
+    const spDefStat = dimension === 'wonder_room' ? defender.calculatedStats.defense : defender.calculatedStats.spDef;
+    const defStage = dimension === 'wonder_room' ? defender.statStages.spDef : defender.statStages.defense;
+    const spDefStage = dimension === 'wonder_room' ? defender.statStages.defense : defender.statStages.spDef;
+
+    const ignoreDefenderStages = attacker.abilities.some(a => a.ability.name === 'unaware');
+    const ignoreAttackerStages = defender.abilities.some(a => a.ability.name === 'unaware');
+
     if (move.damage_class === 'special') {
-      atk = attacker.calculatedStats.spAtk * (STAT_STAGE_MODIFIERS[attacker.statStages.spAtk as keyof typeof STAT_STAGE_MODIFIERS] || 1);
-      def = defender.calculatedStats.spDef * (STAT_STAGE_MODIFIERS[defender.statStages.spDef as keyof typeof STAT_STAGE_MODIFIERS] || 1);
+      atk = attacker.calculatedStats.spAtk * (ignoreAttackerStages ? 1 : (STAT_STAGE_MODIFIERS[attacker.statStages.spAtk as keyof typeof STAT_STAGE_MODIFIERS] || 1));
+      def = spDefStat * (ignoreDefenderStages ? 1 : (STAT_STAGE_MODIFIERS[spDefStage as keyof typeof STAT_STAGE_MODIFIERS] || 1));
     } else {
-      atk = attacker.calculatedStats.attack * (STAT_STAGE_MODIFIERS[attacker.statStages.attack as keyof typeof STAT_STAGE_MODIFIERS] || 1);
-      def = defender.calculatedStats.defense * (STAT_STAGE_MODIFIERS[defender.statStages.defense as keyof typeof STAT_STAGE_MODIFIERS] || 1);
+      atk = attacker.calculatedStats.attack * (ignoreAttackerStages ? 1 : (STAT_STAGE_MODIFIERS[attacker.statStages.attack as keyof typeof STAT_STAGE_MODIFIERS] || 1));
+      def = defStat * (ignoreDefenderStages ? 1 : (STAT_STAGE_MODIFIERS[defStage as keyof typeof STAT_STAGE_MODIFIERS] || 1));
+    }
+    
+    // Snow: Ice types get 1.5x Defense
+    if (weather === 'snow' && defender.types.some(t => t.type.name === 'ice') && move.damage_class === 'physical') {
+      def *= 1.5;
+    }
+    // Sandstorm: Rock types get 1.5x SpDef
+    if (weather === 'sandstorm' && defender.types.some(t => t.type.name === 'rock') && move.damage_class === 'special') {
+      def *= 1.5;
     }
     
     // 异常状态影响
     if (attacker.status === 'burn' && move.damage_class === 'physical') {
       atk *= 0.5;
     }
-    if (attacker.status === 'paralysis') {
-      // 速度减半在先手判断中处理，这里不影响伤害
-    }
 
     // 属性克制
     let multiplier = 1;
+
+    // Ability: Levitate
+    if (move.type === 'ground' && defender.abilities.some(a => a.ability.name === 'levitate')) {
+      return { damage: 0, multiplier: 0, isMiss: false, isCrit: false };
+    }
+
+    // Ability: Water Absorb / Volt Absorb
+    if (move.type === 'water' && defender.abilities.some(a => a.ability.name === 'water-absorb')) {
+      return { damage: -Math.floor(defender.maxHp / 4), multiplier: 0, isMiss: false, isCrit: false };
+    }
+    if (move.type === 'electric' && defender.abilities.some(a => a.ability.name === 'volt-absorb')) {
+      return { damage: -Math.floor(defender.maxHp / 4), multiplier: 0, isMiss: false, isCrit: false };
+    }
+
     defender.types.forEach(t => {
-      const typeMult = TYPE_CHART[move.type]?.[t.type.name];
+      let typeMult = TYPE_CHART[move.type]?.[t.type.name];
       if (typeMult !== undefined) {
+        // Delta Stream: Flying weaknesses removed
+        if (weather === 'strong_winds' && t.type.name === 'flying' && typeMult > 1) {
+          typeMult = 1;
+        }
         multiplier *= typeMult;
       }
     });
 
     // 天气影响
-    if (weather === 'sunny') {
+    if (weather === 'sunny' || weather === 'harsh_sunlight') {
       if (move.type === 'fire') multiplier *= 1.5;
-      if (move.type === 'water') multiplier *= 0.5;
-    } else if (weather === 'rainy') {
+      if (move.type === 'water') {
+        if (weather === 'harsh_sunlight') multiplier = 0;
+        else multiplier *= 0.5;
+      }
+    } else if (weather === 'rainy' || weather === 'heavy_rain') {
       if (move.type === 'water') multiplier *= 1.5;
-      if (move.type === 'fire') multiplier *= 0.5;
+      if (move.type === 'fire') {
+        if (weather === 'heavy_rain') multiplier = 0;
+        else multiplier *= 0.5;
+      }
+    }
+
+    // Terrain influence
+    const isAttackerGrounded = !attacker.types.some(t => t.type.name === 'flying');
+    const isDefenderGrounded = !defender.types.some(t => t.type.name === 'flying');
+    
+    if (isAttackerGrounded) {
+      if (terrain === 'electric' && move.type === 'electric') multiplier *= 1.3;
+      if (terrain === 'grassy' && move.type === 'grass') multiplier *= 1.3;
+      if (terrain === 'psychic' && move.type === 'psychic') multiplier *= 1.3;
+    }
+    if (isDefenderGrounded && terrain === 'misty' && move.type === 'dragon') {
+      multiplier *= 0.5;
     }
 
     // 命中判断
@@ -1517,7 +1895,15 @@ export default function App() {
     const evaStage = defender.statStages.evasion;
     const combinedStage = Math.max(-6, Math.min(6, accStage - evaStage));
     const accuracyMod = ACC_EVA_STAGE_MODIFIERS[combinedStage as keyof typeof ACC_EVA_STAGE_MODIFIERS] || 1;
-    const finalAccuracy = (move.accuracy || 100) * accuracyMod;
+    let finalAccuracy = (move.accuracy || 100) * accuracyMod;
+
+    // Weather accuracy
+    if ((move.name === 'thunder' || move.name === 'hurricane') && (weather === 'rainy' || weather === 'heavy_rain')) {
+      finalAccuracy = 1000; // Always hit
+    }
+    if ((move.name === 'thunder' || move.name === 'hurricane') && (weather === 'sunny' || weather === 'harsh_sunlight')) {
+      finalAccuracy *= 0.5;
+    }
     
     if (Math.random() * 100 > finalAccuracy && move.accuracy !== null) {
       return { damage: 0, multiplier: 0, isMiss: true, isCrit: false };
@@ -1532,7 +1918,11 @@ export default function App() {
     const isCrit = Math.random() < critChance;
     const critMult = isCrit ? 1.5 : 1;
 
-    let damage = Math.floor((((levelMult * basePower * atk / def) / 50) + 2) * (Math.random() * 0.15 + 0.85) * multiplier * critMult);
+    // STAB
+    const isStab = attacker.types.some(t => t.type.name === move.type);
+    const stabMult = isStab ? 1.5 : 1;
+
+    let damage = Math.floor((((levelMult * basePower * atk / def) / 50) + 2) * (Math.random() * 0.15 + 0.85) * multiplier * critMult * stabMult);
     
     if (atkBuff) damage = Math.floor(damage * 1.5);
     if (defBuff) damage = Math.floor(damage * 0.7);
@@ -1617,32 +2007,6 @@ export default function App() {
     }
   };
 
-  const winBattle = async (isCatch = false) => {
-    setLoading(true);
-    try {
-      const isGym = stage % 5 === 0;
-      let earnedCoins = 100 + Math.floor(Math.random() * 201);
-      if (isGym) earnedCoins *= 3;
-      
-      setCoins(prev => prev + earnedCoins);
-      setRerollCount(0);
-
-      const newRewards = await generateRewardSet();
-
-      setRewardChoiceMade(false);
-      setRewards(newRewards);
-      setGameState('REWARD');
-      
-      const winMsg = isCatch 
-        ? t('catchSuccess').replace('{coins}', earnedCoins.toString()) 
-        : t('battleVictory').replace('{coins}', earnedCoins.toString());
-      await addMessagesSequentially([winMsg]);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const selectReward = (reward: any) => {
     if (reward.type === 'SHOP_ITEM') {
@@ -2200,6 +2564,25 @@ export default function App() {
                 <div className="absolute inset-0 bg-[linear-gradient(to_bottom,#e0e0e0,#ffffff)]"></div>
                 <div className="absolute bottom-0 left-0 w-full h-1/3 bg-slate-100 skew-y-[-2deg] origin-left"></div>
                 
+                {/* 环境层 */}
+                <div className="absolute top-4 left-4 z-30 flex flex-col gap-2">
+                  {weather !== 'none' && (
+                    <div className="bg-slate-900/80 text-white px-3 py-1 text-[10px] font-black italic uppercase flex items-center gap-2 border-l-4 border-blue-500">
+                      <CloudRain className="w-3 h-3" /> {t(`weather_${weather}`)} ({weatherTurns})
+                    </div>
+                  )}
+                  {terrain !== 'none' && (
+                    <div className="bg-slate-900/80 text-white px-3 py-1 text-[10px] font-black italic uppercase flex items-center gap-2 border-l-4 border-emerald-500">
+                      <Zap className="w-3 h-3" /> {t(`terrain_${terrain}`)} ({terrainTurns})
+                    </div>
+                  )}
+                  {dimension !== 'none' && (
+                    <div className="bg-slate-900/80 text-white px-3 py-1 text-[10px] font-black italic uppercase flex items-center gap-2 border-l-4 border-purple-500">
+                      <Dna className="w-3 h-3" /> {t(`dimension_${dimension}`)} ({dimensionTurns})
+                    </div>
+                  )}
+                </div>
+
                 {/* 敌人 */}
                 <div className="absolute top-4 sm:top-8 right-4 sm:right-12 flex flex-col items-end">
                   <div className="bg-white p-2 sm:p-3 shadow-lg border-r-8 border-red-500 w-48 sm:w-72 skew-x-[-10deg] mb-2 sm:mb-4">
@@ -2532,7 +2915,7 @@ export default function App() {
                             </motion.div>
                           )}
 
-                          {turn === 'PLAYER' && battleMenuTab === 'POKEMON' && (
+                          {(turn === 'PLAYER' || isFaintedReplacement) && battleMenuTab === 'POKEMON' && (
                             <motion.div 
                               key="pokemon-list"
                               initial={{ opacity: 0, y: 10 }}
@@ -2542,7 +2925,7 @@ export default function App() {
                             >
                               <div className="flex justify-between items-center">
                                 <h3 className="font-black italic flex items-center gap-2"><Dna className="w-5 h-5" /> 我的队伍</h3>
-                                <button onClick={() => setBattleMenuTab('MAIN')} className="text-xs font-bold text-slate-400 hover:text-slate-900 underline">返回</button>
+                                {!isFaintedReplacement && <button onClick={() => setBattleMenuTab('MAIN')} className="text-xs font-bold text-slate-400 hover:text-slate-900 underline">返回</button>}
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
                                 {playerTeam.map((p, idx) => (
@@ -2600,15 +2983,19 @@ export default function App() {
                                 {playerTeam[0].selectedMoves.map((move, idx) => (
                                   <button
                                     key={idx}
+                                    disabled={move.currentPP === 0}
                                     onClick={() => handleAttack(move)}
-                                    className="relative p-2 bg-slate-900 text-white hover:bg-blue-600 transition-all text-left overflow-hidden group flex flex-col justify-center"
+                                    className="relative p-2 bg-slate-900 text-white hover:bg-blue-600 transition-all text-left overflow-hidden group flex flex-col justify-center disabled:opacity-50 disabled:hover:bg-slate-900"
                                   >
                                     <div className="absolute top-0 right-0 w-12 h-full opacity-10 skew-x-[-20deg] bg-white translate-x-6 group-hover:translate-x-3 transition-transform"></div>
                                     <div className="relative z-10 w-full">
                                       <div className="font-black text-sm italic tracking-tighter uppercase truncate">{getLocalized(move)}</div>
                                       <div className="flex justify-between items-center mt-0.5">
                                         <TypeBadge type={move.type} size="xs" />
-                                        <span className="text-[8px] font-black opacity-60">{t('power')}: {move.power || '--'}</span>
+                                        <div className="flex flex-col items-end">
+                                          <span className="text-[8px] font-black opacity-60">{t('power')}: {move.power || '--'}</span>
+                                          <span className="text-[8px] font-black opacity-60">PP: {move.currentPP}/{move.maxPP}</span>
+                                        </div>
                                       </div>
                                     </div>
                                   </button>

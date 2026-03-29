@@ -97,6 +97,7 @@ export async function fetchMove(url: string): Promise<Move> {
   });
 
   return {
+    id: data.name,
     name: data.name,
     names: data.names,
     zhName: zhName || data.name,
@@ -105,6 +106,8 @@ export async function fetchMove(url: string): Promise<Move> {
     type: data.type.name,
     damage_class: data.damage_class.name,
     pp: data.pp,
+    currentPP: data.pp,
+    maxPP: data.pp,
     zhDescription: zhDescription || '暂无描述',
     flavor_text_entries: data.flavor_text_entries,
     ailment: data.meta?.ailment?.name !== 'none' ? data.meta?.ailment?.name : undefined,
@@ -115,6 +118,7 @@ export async function fetchMove(url: string): Promise<Move> {
     healing: data.meta?.healing || 0,
     critRate: data.meta?.crit_rate || 0,
     target: data.target?.name,
+    priority: data.priority,
   };
 }
 
@@ -198,6 +202,7 @@ export async function getProcessedPokemon(id: number, level: number = 50): Promi
   
   if (validMoves.length === 0) {
     validMoves.push({
+      id: 'tackle',
       name: 'tackle',
       zhName: '撞击',
       power: 40,
@@ -205,6 +210,8 @@ export async function getProcessedPokemon(id: number, level: number = 50): Promi
       type: 'normal',
       damage_class: 'physical',
       pp: 35,
+      currentPP: 35,
+      maxPP: 35,
       zhDescription: '用整个身体撞向对手进行攻击。'
     });
   }

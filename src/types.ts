@@ -34,6 +34,7 @@ export interface Pokemon {
 }
 
 export interface Move {
+  id: string;
   name: string;
   names?: { name: string; language: { name: string } }[];
   zhName?: string;
@@ -42,6 +43,8 @@ export interface Move {
   type: string;
   damage_class: string;
   pp?: number;
+  currentPP?: number;
+  maxPP?: number;
   zhDescription?: string;
   flavor_text_entries?: { flavor_text: string; language: { name: string } }[];
   ailment?: string;
@@ -52,6 +55,7 @@ export interface Move {
   healing?: number;
   critRate?: number;
   target?: string;
+  priority?: number;
 }
 
 export interface Nature {
@@ -91,7 +95,10 @@ export interface GamePokemon extends Pokemon {
   calculatedStats: Stats;
   isGym?: boolean;
   status?: string;
+  statusTurns?: number;
   statStages: StatStages;
+  volatileStatus?: string[];
+  heldItem?: Item;
 }
 
 export interface Item {
@@ -106,7 +113,9 @@ export interface Item {
   catchRate?: number;
 }
 
-export type Weather = 'none' | 'sunny' | 'rainy' | 'sandstorm' | 'hail';
+export type Weather = 'none' | 'sunny' | 'rainy' | 'sandstorm' | 'snow' | 'heavy_rain' | 'harsh_sunlight' | 'strong_winds';
+export type Terrain = 'none' | 'electric' | 'grassy' | 'psychic' | 'misty';
+export type Dimension = 'none' | 'trick_room' | 'magic_room' | 'wonder_room';
 
 export type GameState = 'START' | 'MENU' | 'BATTLE' | 'REWARD' | 'LEARN_MOVE' | 'POKEMON_INFO' | 'GAMEOVER' | 'STARTER_SELECT' | 'EVOLUTION';
 export type BattleMenuTab = 'MAIN' | 'MOVES' | 'POKEMON' | 'BAG';
