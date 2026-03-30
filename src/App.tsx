@@ -351,6 +351,123 @@ const ALL_ITEMS: Item[] = [
   }
 ];
 
+// --- Evolution Animation Component ---
+const EvolutionAnimation = ({ from, to, onComplete, t, getLocalized }: { 
+  from: GamePokemon; 
+  to: Pokemon; 
+  onComplete: () => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
+  getLocalized: (obj: any) => string;
+}) => {
+  const [phase, setPhase] = useState<'START' | 'FLICKER' | 'FLASH' | 'RESULT'>('START');
+  const [showTo, setShowTo] = useState(false);
+  const [flickerSpeed, setFlickerSpeed] = useState(400);
+
+  useEffect(() => {
+    // Phase 1: Start
+    const startTimer = setTimeout(() => setPhase('FLICKER'), 1000);
+    return () => clearTimeout(startTimer);
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'FLICKER') return;
+
+    let timer: NodeJS.Timeout;
+    const flicker = () => {
+      setShowTo(prev => !prev);
+      setFlickerSpeed(prev => Math.max(50, prev * 0.9));
+      
+      if (flickerSpeed <= 60) {
+        setPhase('FLASH');
+      } else {
+        timer = setTimeout(flicker, flickerSpeed);
+      }
+    };
+
+    timer = setTimeout(flicker, flickerSpeed);
+    return () => clearTimeout(timer);
+  }, [phase, flickerSpeed]);
+
+  useEffect(() => {
+    if (phase !== 'FLASH') return;
+    const flashTimer = setTimeout(() => setPhase('RESULT'), 500);
+    return () => clearTimeout(flashTimer);
+  }, [phase]);
+
+  return (
+    <div className="relative w-full h-full flex flex-col items-center justify-center bg-white">
+      {phase === 'FLASH' && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 z-50 bg-white"
+        />
+      )}
+
+      <div className="relative w-64 h-64 mb-8">
+        <AnimatePresence mode="wait">
+          {phase === 'RESULT' ? (
+            <motion.div
+              key="result"
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1.2, opacity: 1 }}
+              transition={{ type: 'spring', damping: 12 }}
+              className="flex flex-col items-center"
+            >
+              <img 
+                src={to.sprites.front_default} 
+                alt={getLocalized(to.names)}
+                className="w-full h-full object-contain pixelated"
+                referrerPolicy="no-referrer"
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={showTo ? 'to' : 'from'}
+              initial={{ opacity: 1 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 1 }}
+              className="w-full h-full"
+            >
+              <img 
+                src={showTo ? to.sprites.front_default : from.sprites.front_default} 
+                alt="evolving"
+                className={`w-full h-full object-contain pixelated ${phase === 'FLICKER' ? 'brightness-150' : ''}`}
+                referrerPolicy="no-referrer"
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {phase === 'RESULT' && (
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="text-center px-4"
+        >
+          <h2 className="text-3xl font-bold text-blue-600 mb-4">
+            {t('evolveSuccessMsg', { from: getLocalized(from.names), to: getLocalized(to.names) })}
+          </h2>
+          <button
+            onClick={onComplete}
+            className="px-8 py-3 bg-blue-500 text-white rounded-full font-bold shadow-lg hover:bg-blue-600 transition-colors"
+          >
+            {t('confirm')}
+          </button>
+        </motion.div>
+      )}
+      
+      {phase !== 'RESULT' && (
+        <div className="text-gray-400 font-mono animate-pulse">
+          EVOLVING...
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   const [gameState, setGameState] = useState<GameState>('START');
   const [startStep, setStartStep] = useState(0); // 0: Title, 1: Region, 2: Level
@@ -378,6 +495,8 @@ export default function App() {
   const [showLogHistory, setShowLogHistory] = useState(false);
   const [currentLanguage, setCurrentLanguage] = useState('zh-hans');
   const [pendingRewardAction, setPendingRewardAction] = useState<'MOVE' | 'EVOLUTION' | null>(null);
+  const [evolutionConfirmChoice, setEvolutionConfirmChoice] = useState<Pokemon | null>(null);
+  const [isEvolutionAnimating, setIsEvolutionAnimating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [inventory, setInventory] = useState<Item[]>([]);
   const [stage, setStage] = useState(1);
@@ -408,6 +527,7 @@ export default function App() {
       victory: '胜利！',
       chooseReward: '选择一项奖励以继续你的冒险',
       viewTeam: '查看我的队伍',
+      teamList: '队伍列表',
       randomRewards: '随机奖励',
       getItem: '获得道具',
       learnMove: '学习新技能',
@@ -486,6 +606,7 @@ export default function App() {
       nextStep: '下一步：选择等级',
       setDifficulty: '设定初始挑战难度',
       startAdventure: '开启冒险之旅',
+      nextLevel: '下一关',
       thinking: '对手正在思考...',
       commandPhase: '指令阶段',
       whatToDo: '该怎么办呢？',
@@ -505,6 +626,9 @@ export default function App() {
       selectToEvolve: '选择一只宝可梦进行进化',
       chooseEvolution: '选择进化形态',
       evolve: '进化',
+      confirmEvolution: '确认进化',
+      confirmEvolutionDesc: '是否确定将 {name} 进化为 {target}？',
+      evolveSuccessMsg: '恭喜！{name} 进化成为了 {target}！',
       shop: '商店',
       price: '价格',
       learningNewMove: '正在学习新技能...',
@@ -561,6 +685,7 @@ export default function App() {
       victory: '勝利！',
       chooseReward: '選擇一項獎勵以繼續你的冒險',
       viewTeam: '查看我的隊伍',
+      teamList: '隊伍列表',
       randomRewards: '隨機獎勵',
       getItem: '獲得道具',
       learnMove: '學習新技能',
@@ -639,6 +764,7 @@ export default function App() {
       nextStep: '下一步：選擇等級',
       setDifficulty: '設定初始挑戰難度',
       startAdventure: '開啟冒險之旅',
+      nextLevel: '下一關',
       thinking: '對手正在思考...',
       commandPhase: '指令階段',
       whatToDo: '該怎麼辦呢？',
@@ -658,6 +784,9 @@ export default function App() {
       selectToEvolve: '選擇一隻寶可夢進行進化',
       chooseEvolution: '選擇進化形態',
       evolve: '進化',
+      confirmEvolution: '確認進化',
+      confirmEvolutionDesc: '是否確定將 {name} 進化為 {target}？',
+      evolveSuccessMsg: '恭喜！{name} 進化成为了 {target}！',
       shop: '商店',
       price: '價格',
       learningNewMove: '正在學習新技能...',
@@ -714,6 +843,7 @@ export default function App() {
       victory: 'Victory!',
       chooseReward: 'Choose a reward to continue your adventure',
       viewTeam: 'View My Team',
+      teamList: 'Team List',
       randomRewards: 'Random Rewards',
       getItem: 'Get Item',
       learnMove: 'Learn New Move',
@@ -792,6 +922,7 @@ export default function App() {
       nextStep: 'Next: Select Level',
       setDifficulty: 'Set Initial Difficulty',
       startAdventure: 'Start Adventure',
+      nextLevel: 'Next Level',
       thinking: 'Enemy is thinking...',
       commandPhase: 'Command Phase',
       whatToDo: 'What will you do?',
@@ -811,6 +942,9 @@ export default function App() {
       selectToEvolve: 'Select a Pokemon to evolve',
       chooseEvolution: 'Choose Evolution Form',
       evolve: 'Evolve',
+      confirmEvolution: 'Confirm Evolution',
+      confirmEvolutionDesc: 'Are you sure you want to evolve {name} into {target}?',
+      evolveSuccessMsg: 'Congratulations! {name} evolved into {target}!',
       shop: 'Shop',
       price: 'Price',
       learningNewMove: 'Learning new move...',
@@ -1069,8 +1203,7 @@ export default function App() {
     if (item.isBall) {
       if (enemy?.isGym) {
         await addMessagesSequentially(["不能捕捉道馆馆主的宝可梦！"]);
-        setTurn('ENEMY');
-        setBattleMenuTab('MAIN');
+        await executeEnemyTurn(playerTeam);
         return;
       }
 
@@ -1112,8 +1245,7 @@ export default function App() {
         // 立即恢复精灵展示，不再等待气泡动画完全结束
         setIsCatching(false);
         setCatchSuccess(null);
-        setTurn('ENEMY');
-        setBattleMenuTab('MAIN');
+        await executeEnemyTurn(playerTeam);
       }
       return;
     }
@@ -1126,8 +1258,7 @@ export default function App() {
     if (item.id === 'battle_atk') setActiveBuffs(prev => ({ ...prev, atk: true }));
     if (item.id === 'battle_def') setActiveBuffs(prev => ({ ...prev, def: true }));
 
-    setTurn('ENEMY');
-    setBattleMenuTab('MAIN');
+    await executeEnemyTurn(updatedTeam);
   };
 
   const switchPokemon = async (index: number) => {
@@ -1150,14 +1281,7 @@ export default function App() {
       setIsFaintedReplacement(false);
       setTurn('PLAYER');
     } else {
-      setTurn('ENEMY');
-      // Force enemy turn
-      const availableEnemyMoves = enemy!.selectedMoves.filter(m => (m.currentPP || 0) > 0);
-      const enemyMove = availableEnemyMoves.length > 0 
-        ? availableEnemyMoves[Math.floor(Math.random() * availableEnemyMoves.length)]
-        : STRUGGLE_MOVE;
-      await executeAttack(enemyMove, enemy!, newTeam[0], false);
-      setTurn('PLAYER');
+      await executeEnemyTurn(newTeam);
     }
     setBattleMenuTab('MAIN');
   };
@@ -1537,6 +1661,34 @@ export default function App() {
     }
 
     return { success: true, attacker: currentAttacker, defender: currentDefender };
+  };
+
+  const executeEnemyTurn = async (currentTeam: GamePokemon[]) => {
+    if (!enemy || currentTeam.length === 0) return;
+    setTurn('ENEMY');
+    const availableEnemyMoves = enemy.selectedMoves.filter(m => (m.currentPP || 0) > 0);
+    const enemyMove = availableEnemyMoves.length > 0 
+      ? availableEnemyMoves[Math.floor(Math.random() * availableEnemyMoves.length)]
+      : STRUGGLE_MOVE;
+    const res = await executeAttack(enemyMove, enemy, currentTeam[0], false);
+    
+    const currentPlayer = res.defender;
+    const currentEnemy = res.attacker;
+
+    if (currentEnemy.currentHp <= 0) {
+      winBattle();
+    } else if (currentPlayer.currentHp <= 0) {
+      const isAllFainted = currentTeam.slice(1).every(p => p.currentHp <= 0);
+      if (isAllFainted) {
+        setGameState('GAMEOVER');
+      } else {
+        setIsFaintedReplacement(true);
+        setBattleMenuTab('POKEMON');
+      }
+    } else {
+      setTurn('PLAYER');
+      setBattleMenuTab('MAIN');
+    }
   };
 
   const handleAttack = async (playerMove: Move) => {
@@ -2078,25 +2230,22 @@ export default function App() {
       
       setEvolutionTarget(pokemon);
       setEvolvedPokemon(evolved);
-      setIsEvolving(true);
+      setIsEvolutionAnimating(true);
       
-      // Animation sequence
+      // Animation sequence handled by the component
       setTimeout(() => {
         setPlayerTeam(prev => {
           const newTeam = [...prev];
           newTeam[index] = evolved;
           return newTeam;
         });
-        setTimeout(() => {
-          setIsEvolving(false);
-          finishReward();
-        }, 3000);
-      }, 4000);
+      }, 5000); // Update team after flicker animation
       
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+      setEvolutionConfirmChoice(null);
     }
   };
 
@@ -3052,7 +3201,7 @@ export default function App() {
                   )}
                   <button 
                     onClick={() => {
-                      setInfoPokemonIdx(0);
+                      setInfoPokemonIdx(null);
                       setPrevGameState(gameState);
                       setGameState('POKEMON_INFO');
                     }}
@@ -3060,19 +3209,22 @@ export default function App() {
                   >
                     <span className="skew-x-[10deg] inline-block flex items-center gap-2"><Dna className="w-3 h-3" /> {t('viewTeam')}</span>
                   </button>
-                  {rewardChoiceMade && !pendingRewardAction && (
-                    <button 
-                      onClick={nextStage}
-                      className="px-8 py-2 bg-blue-600 text-white font-black italic text-sm hover:bg-blue-700 transition-all skew-x-[-10deg] shadow-lg animate-pulse"
-                    >
-                      <span className="skew-x-[10deg] inline-block flex items-center gap-2">{t('nextStep')} <ChevronRight className="w-4 h-4" /></span>
-                    </button>
-                  )}
+                  <button 
+                    onClick={nextStage}
+                    disabled={!rewardChoiceMade || !!pendingRewardAction}
+                    className={`px-8 py-2 font-black italic text-sm transition-all skew-x-[-10deg] shadow-lg ${
+                      !rewardChoiceMade || !!pendingRewardAction
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 animate-pulse'
+                    }`}
+                  >
+                    <span className="skew-x-[10deg] inline-block flex items-center gap-2">{t('nextLevel')} <ChevronRight className="w-4 h-4" /></span>
+                  </button>
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto custom-scrollbar px-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-8">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pb-8">
                   {rewards.map((reward, i) => {
                     const isShop = reward.type === 'SHOP_ITEM';
                     const isClaimed = rewardChoiceMade && !isShop;
@@ -3312,17 +3464,17 @@ export default function App() {
 
                     {!selectedPokemonForEvolution ? (
                       <div className="flex-1 flex flex-col overflow-hidden">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pb-8 overflow-y-auto custom-scrollbar pr-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 pb-8 overflow-y-auto custom-scrollbar pr-2">
                           {playerTeam.map((p, idx) => (
                             <div
                               key={idx}
-                              className="bg-white p-6 shadow-xl hover:shadow-2xl transition-all border-b-4 border-slate-100 hover:border-purple-500 group flex flex-col items-center"
+                              className="bg-white p-8 shadow-xl hover:shadow-2xl transition-all border-b-4 border-slate-100 hover:border-purple-500 group flex flex-col items-center"
                             >
-                              <img src={p.sprites.front_default} className="w-24 h-24 mx-auto mb-4 group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
-                              <div className="font-black italic text-xl uppercase">{getLocalized(p)}</div>
+                              <img src={p.sprites.front_default} className="w-32 h-32 mx-auto mb-4 group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
+                              <div className="font-black italic text-2xl uppercase">{getLocalized(p)}</div>
                               <button
                                 onClick={() => startEvolution(p, idx)}
-                                className="w-full mt-4 py-2 bg-purple-500 text-white font-black italic text-sm hover:bg-purple-600 transition-colors skew-x-[-10deg]"
+                                className="w-full mt-6 py-3 bg-purple-500 text-white font-black italic text-base hover:bg-purple-600 transition-colors skew-x-[-10deg]"
                               >
                                 <span className="skew-x-[10deg] inline-block">{t('evolve')}</span>
                               </button>
@@ -3340,26 +3492,26 @@ export default function App() {
                       </div>
                     ) : (
                       <div className="flex flex-col h-full">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto pr-2 custom-scrollbar flex-1 mb-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 overflow-y-auto pr-2 custom-scrollbar flex-1 mb-4">
                           {evolutionChoices.map((choice) => (
                             <motion.button
                               key={choice.id}
                               whileHover={{ scale: 1.02 }}
                               whileTap={{ scale: 0.98 }}
-                              onClick={() => performEvolution(choice.id)}
-                              className="bg-white p-4 md:p-8 rounded-2xl shadow-xl border-2 md:border-4 border-purple-100 hover:border-purple-500 transition-all flex items-center md:flex-col gap-4 md:gap-0 group relative overflow-hidden"
+                              onClick={() => setEvolutionConfirmChoice(choice)}
+                              className="bg-white p-6 md:p-10 rounded-2xl shadow-xl border-2 md:border-4 border-purple-100 hover:border-purple-500 transition-all flex items-center md:flex-col gap-6 md:gap-0 group relative overflow-hidden"
                             >
-                              <div className="absolute top-0 right-0 w-12 h-12 md:w-16 md:h-16 bg-purple-500 skew-x-[45deg] translate-x-6 md:translate-x-8 -translate-y-6 md:-translate-y-8 group-hover:translate-x-4 md:group-hover:translate-x-6 group-hover:-translate-y-4 md:group-hover:-translate-y-6 transition-transform" />
+                              <div className="absolute top-0 right-0 w-16 h-16 md:w-24 md:h-24 bg-purple-500 skew-x-[45deg] translate-x-8 md:translate-x-12 -translate-y-8 md:-translate-y-12 group-hover:translate-x-6 md:group-hover:translate-x-8 group-hover:-translate-y-6 md:group-hover:-translate-y-8 transition-transform" />
                               <img 
                                 src={choice.sprites.front_default} 
-                                className="w-16 h-16 md:w-32 md:h-32 group-hover:scale-110 transition-transform z-10" 
+                                className="w-24 h-24 md:w-48 md:h-48 group-hover:scale-110 transition-transform z-10" 
                                 referrerPolicy="no-referrer" 
                               />
                               <div className="flex-1 md:flex-none text-left md:text-center z-10">
-                                <div className="font-black italic text-lg md:text-2xl uppercase text-slate-900">{getLocalized(choice)}</div>
-                                <div className="mt-1 md:mt-4 flex gap-1 md:gap-2">
+                                <div className="font-black italic text-xl md:text-3xl uppercase text-slate-900">{getLocalized(choice)}</div>
+                                <div className="mt-2 md:mt-6 flex gap-1 md:gap-2">
                                   {choice.types.map(t => (
-                                    <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
+                                    <TypeBadge key={t.type.name} type={t.type.name} size="sm" />
                                   ))}
                                 </div>
                               </div>
@@ -3379,6 +3531,49 @@ export default function App() {
                         </div>
                       </div>
                     )}
+
+                    {/* 进化确认弹窗 */}
+                    <AnimatePresence>
+                      {evolutionConfirmChoice && (
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="fixed inset-0 z-[60] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6"
+                        >
+                          <motion.div 
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-white max-w-md w-full p-8 shadow-2xl skew-x-[-2deg]"
+                          >
+                            <div className="skew-x-[2deg] text-center">
+                              <h3 className="text-2xl font-black italic mb-4 uppercase">{t('confirmEvolution')}</h3>
+                              <p className="text-slate-600 font-bold italic mb-8">
+                                {t('confirmEvolutionDesc', { 
+                                  name: getLocalized(selectedPokemonForEvolution?.pokemon), 
+                                  target: getLocalized(evolutionConfirmChoice) 
+                                })}
+                              </p>
+                              <div className="flex gap-4">
+                                <button 
+                                  onClick={() => setEvolutionConfirmChoice(null)}
+                                  className="flex-1 py-3 bg-slate-100 text-slate-500 font-black italic hover:bg-slate-200 transition-all skew-x-[-10deg]"
+                                >
+                                  <span className="skew-x-[10deg]">{t('cancel')}</span>
+                                </button>
+                                <button 
+                                  onClick={() => performEvolution(evolutionConfirmChoice.id)}
+                                  className="flex-1 py-3 bg-purple-600 text-white font-black italic hover:bg-purple-700 transition-all skew-x-[-10deg] shadow-lg"
+                                >
+                                  <span className="skew-x-[10deg]">{t('confirm')}</span>
+                                </button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -3427,165 +3622,255 @@ export default function App() {
             </motion.div>
           )}
 
-          {gameState === 'POKEMON_INFO' && infoPokemonIdx !== null && (
+          {gameState === 'POKEMON_INFO' && (
             <motion.div
-              key="pokemon-info"
-              initial={{ opacity: 0, x: 100 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -100 }}
-              className="flex-1 flex flex-col max-w-5xl mx-auto w-full overflow-hidden"
+              key="pokemon-info-container"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex-1 flex flex-col max-w-5xl mx-auto w-full overflow-hidden p-4"
             >
-              {(() => {
-                const displayPokemon = prevGameState === 'STARTER_SELECT' 
-                  ? starterOptions[infoPokemonIdx] 
-                  : playerTeam[infoPokemonIdx];
-                
-                return (
-                  <div className="bg-white shadow-2xl overflow-hidden border-y-4 md:border-y-8 border-slate-900 flex-1 flex flex-col">
-                    <div className="flex-1 overflow-y-auto custom-scrollbar">
-                      <div className="grid grid-cols-1 md:grid-cols-2">
-                        {/* 左侧：基本信息与大图 */}
-                        <div className="p-4 md:p-8 bg-slate-50 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 p-2 md:p-4 opacity-20 md:opacity-100">
-                            <div className="text-4xl md:text-6xl font-black italic text-slate-200 tracking-tighter">
-                              #{String(displayPokemon.id).padStart(3, '0')}
-                            </div>
+              {infoPokemonIdx === null ? (
+                /* 队伍列表页 */
+                <div className="flex-1 flex flex-col bg-white shadow-2xl border-y-4 md:border-y-8 border-slate-900 overflow-hidden">
+                  <div className="bg-slate-900 p-4 flex justify-between items-center">
+                    <h2 className="text-white font-black italic text-xl uppercase tracking-tighter">{t('teamList')}</h2>
+                    <button 
+                      onClick={() => setGameState(prevGameState)}
+                      className="px-4 py-1 bg-white text-slate-900 font-black italic text-xs skew-x-[-10deg] hover:bg-blue-500 hover:text-white transition-all"
+                    >
+                      <span className="skew-x-[10deg]">{t('back')}</span>
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {playerTeam.map((p, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setInfoPokemonIdx(idx)}
+                          className="flex items-center gap-4 p-4 bg-slate-50 border-l-4 border-slate-900 hover:bg-slate-100 transition-all group text-left"
+                        >
+                          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform overflow-hidden">
+                            <img src={p.sprites.front_default} className="w-14 h-14 object-contain" referrerPolicy="no-referrer" />
                           </div>
-                          <div className="relative z-10">
-                            <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-8">
-                              <div className="bg-slate-900 text-white px-3 py-1 skew-x-[-12deg] font-black italic text-sm md:text-xl">
-                                <span className="skew-x-[12deg]">LV.{displayPokemon.level}</span>
-                              </div>
-                              <h2 className="text-2xl md:text-4xl font-black italic tracking-tighter uppercase truncate">{getLocalized(displayPokemon)}</h2>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-end mb-1">
+                              <div className="font-black italic text-lg uppercase truncate">{getLocalized(p)}</div>
+                              <div className="text-xs font-black text-slate-400 italic">LV.{p.level}</div>
                             </div>
-                            <div className="flex gap-2 md:gap-3 mb-4 md:mb-8">
-                              {displayPokemon.types.map(t => (
-                                <TypeBadge key={t.type.name} type={t.type.name} size={window.innerWidth < 768 ? "sm" : "lg"} />
-                              ))}
-                            </div>
-                            <div className="flex justify-center py-4 md:py-12">
-                              <motion.img 
-                                animate={{ y: [0, -10, 0] }}
-                                transition={{ repeat: Infinity, duration: 3 }}
-                                src={displayPokemon.sprites.front_default} 
-                                className="w-40 h-40 md:w-64 md:h-64 object-contain drop-shadow-2xl" 
-                                referrerPolicy="no-referrer" 
+                            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${(p.currentHp / p.maxHp) * 100}%` }}
+                                className={`h-full ${p.currentHp / p.maxHp > 0.5 ? 'bg-green-500' : p.currentHp / p.maxHp > 0.2 ? 'bg-yellow-500' : 'bg-red-500'}`}
                               />
                             </div>
-                            <div className="bg-white p-3 md:p-4 border-l-4 border-slate-900 shadow-sm">
-                              <div className="text-[10px] font-black text-slate-400 uppercase mb-1">{currentLanguage.startsWith('zh') ? '特性' : 'Ability'}</div>
-                              <div className="font-black italic text-base md:text-lg">
-                                {getLocalized(displayPokemon.abilities[0]?.ability) || (currentLanguage.startsWith('zh') ? '无' : 'None')}
-                              </div>
+                            <div className="flex justify-between text-[10px] font-bold italic text-slate-400 mt-1">
+                              <span>HP</span>
+                              <span>{p.currentHp} / {p.maxHp}</span>
                             </div>
                           </div>
-                        </div>
-
-                        {/* 右侧：能力值与技能 */}
-                        <div className="p-4 md:p-8 bg-white">
-                          <div className="mb-6 md:mb-8">
-                            <div className="flex justify-between items-end mb-4 md:mb-6 border-b border-slate-100 pb-2">
-                              <h3 className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400">{currentLanguage.startsWith('zh') ? '能力值' : 'Stats'}</h3>
-                              <div className="text-[8px] md:text-[10px] font-bold text-blue-500 italic">
-                                {getLocalizedNature(displayPokemon.nature)} {currentLanguage.startsWith('zh') ? '性格' : 'Nature'} 
-                                ({displayPokemon.nature.plus ? `+${getStatName(displayPokemon.nature.plus)}` : ''}
-                                {displayPokemon.nature.minus ? `, -${getStatName(displayPokemon.nature.minus)}` : ''})
-                              </div>
-                            </div>
-                            <div className="space-y-2 md:space-y-3">
-                              {[
-                                { key: 'hp', color: 'bg-red-500' },
-                                { key: 'attack', color: 'bg-orange-500' },
-                                { key: 'defense', color: 'bg-yellow-500' },
-                                { key: 'spAtk', color: 'bg-blue-500' },
-                                { key: 'spDef', color: 'bg-green-500' },
-                                { key: 'speed', color: 'bg-pink-500' }
-                              ].map((s, i) => {
-                                const val = (displayPokemon.calculatedStats as any)[s.key];
-                                const base = (displayPokemon.baseStats as any)[s.key];
-                                const iv = (displayPokemon.ivs as any)[s.key];
-                                const max = 400; 
-                                const statName = getStatName(s.key);
-                                
-                                return (
-                                  <div key={i} className="flex flex-col gap-0.5 md:gap-1">
-                                    <div className="flex justify-between items-center text-[8px] md:text-[10px] font-bold italic">
-                                      <div className="text-slate-500">{statName}</div>
-                                      <div className="text-slate-300">{currentLanguage.startsWith('zh') ? '种族' : 'Base'}: {base} / {currentLanguage.startsWith('zh') ? '个体' : 'IV'}: {iv}</div>
-                                    </div>
-                                    <div className="flex items-center gap-3 md:gap-4">
-                                      <div className="flex-1 h-1.5 md:h-2 bg-slate-100 rounded-full overflow-hidden">
-                                        <motion.div 
-                                          initial={{ width: 0 }}
-                                          animate={{ width: `${(val / max) * 100}%` }}
-                                          className={`h-full ${s.color}`}
-                                        />
-                                      </div>
-                                      <div className="w-6 md:w-8 text-right font-black italic text-xs md:text-sm">{val}</div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          <div className="relative">
-                            <h3 className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400 mb-4 md:mb-6 border-b border-slate-100 pb-2">{currentLanguage.startsWith('zh') ? '当前技能' : 'Current Moves'}</h3>
-                            <div className="grid grid-cols-1 gap-2 md:gap-3">
-                              {displayPokemon.selectedMoves.map((m, i) => (
-                                <div 
-                                  key={i} 
-                                  onMouseEnter={() => setHoveredMove(m)}
-                                  onMouseLeave={() => setHoveredMove(null)}
-                                  className="flex items-center justify-between p-2 md:p-3 bg-slate-50 border-l-4 border-slate-900 group hover:bg-slate-100 transition-colors cursor-help"
-                                >
-                                  <div className="flex-1 min-w-0 pr-2">
-                                    <div className="font-black italic uppercase text-xs md:text-sm truncate">{getLocalized(m)}</div>
-                                    <div className="text-[8px] md:text-[10px] text-slate-400 font-bold italic truncate">
-                                      {currentLanguage.startsWith('zh') ? '威力' : 'Power'}: {m.power || '--'} / 
-                                      {currentLanguage.startsWith('zh') ? '命中' : 'Accuracy'}: {m.accuracy || '--'} / 
-                                      PP: {m.pp || '--'}
-                                    </div>
-                                  </div>
-                                  <TypeBadge type={m.type} size="xs" />
-                                </div>
-                              ))}
-                            </div>
-
-                            {/* 技能详情浮层 */}
-                            <AnimatePresence>
-                              {hoveredMove && (
-                                <motion.div
-                                  initial={{ opacity: 0, y: 10 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, y: 10 }}
-                                  className="absolute bottom-full left-0 right-0 mb-2 md:mb-4 bg-slate-900 text-white p-3 md:p-4 shadow-2xl z-50 border-t-4 border-blue-500"
-                                >
-                                  <div className="flex justify-between items-center mb-1 md:mb-2">
-                                    <div className="font-black italic text-sm md:text-lg">{getLocalized(hoveredMove)}</div>
-                                    <div className="text-[8px] md:text-[10px] px-2 py-0.5 bg-white text-slate-900 font-bold uppercase">{hoveredMove.damage_class === 'special' ? '特攻' : '物理'}</div>
-                                  </div>
-                                  <p className="text-[10px] md:text-xs text-slate-300 leading-relaxed italic">{getLocalizedDesc(hoveredMove)}</p>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="bg-slate-900 p-3 md:p-4 flex justify-end flex-none">
-                      <button 
-                        onClick={() => setGameState(prevGameState)}
-                        className="px-6 md:px-8 py-2 bg-white text-slate-900 font-black italic skew-x-[-12deg] hover:bg-blue-500 hover:text-white transition-all text-sm md:text-base"
-                      >
-                        <span className="skew-x-[12deg]">{t('back')}</span>
-                      </button>
+                          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-slate-900 transition-colors" />
+                        </button>
+                      ))}
                     </div>
                   </div>
-                );
-              })()}
+                </div>
+              ) : (
+                /* 宝可梦详情页 */
+                <motion.div
+                  key="pokemon-detail"
+                  initial={{ opacity: 0, x: 50 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex-1 flex flex-col overflow-hidden"
+                >
+                  {(() => {
+                    const displayPokemon = prevGameState === 'STARTER_SELECT' 
+                      ? starterOptions[infoPokemonIdx] 
+                      : playerTeam[infoPokemonIdx];
+                    
+                    return (
+                      <div className="bg-white shadow-2xl overflow-hidden border-y-4 md:border-y-8 border-slate-900 flex-1 flex flex-col">
+                        <div className="flex-1 overflow-y-auto custom-scrollbar">
+                          <div className="grid grid-cols-1 md:grid-cols-2">
+                            {/* 左侧：基本信息与大图 */}
+                            <div className="p-4 md:p-8 bg-slate-50 relative overflow-hidden">
+                              <div className="absolute top-0 right-0 p-2 md:p-4 opacity-20 md:opacity-100">
+                                <div className="text-4xl md:text-6xl font-black italic text-slate-200 tracking-tighter">
+                                  #{String(displayPokemon.id).padStart(3, '0')}
+                                </div>
+                              </div>
+                              <div className="relative z-10">
+                                <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-8">
+                                  <div className="bg-slate-900 text-white px-3 py-1 skew-x-[-12deg] font-black italic text-sm md:text-xl">
+                                    <span className="skew-x-[12deg]">LV.{displayPokemon.level}</span>
+                                  </div>
+                                  <h2 className="text-2xl md:text-4xl font-black italic tracking-tighter uppercase truncate">{getLocalized(displayPokemon)}</h2>
+                                </div>
+                                <div className="flex gap-2 md:gap-3 mb-4 md:mb-8">
+                                  {displayPokemon.types.map(t => (
+                                    <TypeBadge key={t.type.name} type={t.type.name} size={window.innerWidth < 768 ? "sm" : "lg"} />
+                                  ))}
+                                </div>
+                                <div className="flex justify-center py-4 md:py-12">
+                                  <motion.img 
+                                    animate={{ y: [0, -10, 0] }}
+                                    transition={{ repeat: Infinity, duration: 3 }}
+                                    src={displayPokemon.sprites.front_default} 
+                                    className="w-40 h-40 md:w-64 md:h-64 object-contain drop-shadow-2xl" 
+                                    referrerPolicy="no-referrer" 
+                                  />
+                                </div>
+                                <div className="bg-white p-3 md:p-4 border-l-4 border-slate-900 shadow-sm">
+                                  <div className="text-[10px] font-black text-slate-400 uppercase mb-1">{currentLanguage.startsWith('zh') ? '特性' : 'Ability'}</div>
+                                  <div className="font-black italic text-base md:text-lg">
+                                    {getLocalized(displayPokemon.abilities[0]?.ability) || (currentLanguage.startsWith('zh') ? '无' : 'None')}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 右侧：能力值与技能 */}
+                            <div className="p-4 md:p-8 bg-white">
+                              <div className="mb-6 md:mb-8">
+                                <div className="flex justify-between items-end mb-4 md:mb-6 border-b border-slate-100 pb-2">
+                                  <h3 className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400">{currentLanguage.startsWith('zh') ? '能力值' : 'Stats'}</h3>
+                                  <div className="text-[8px] md:text-[10px] font-bold text-blue-500 italic">
+                                    {getLocalizedNature(displayPokemon.nature)} {currentLanguage.startsWith('zh') ? '性格' : 'Nature'} 
+                                    ({displayPokemon.nature.plus ? `+${getStatName(displayPokemon.nature.plus)}` : ''}
+                                    {displayPokemon.nature.minus ? `, -${getStatName(displayPokemon.nature.minus)}` : ''})
+                                  </div>
+                                </div>
+                                <div className="space-y-2 md:space-y-3">
+                                  {[
+                                    { key: 'hp', color: 'bg-red-500' },
+                                    { key: 'attack', color: 'bg-orange-500' },
+                                    { key: 'defense', color: 'bg-yellow-500' },
+                                    { key: 'spAtk', color: 'bg-blue-500' },
+                                    { key: 'spDef', color: 'bg-green-500' },
+                                    { key: 'speed', color: 'bg-pink-500' }
+                                  ].map((s, i) => {
+                                    const val = (displayPokemon.calculatedStats as any)[s.key];
+                                    const base = (displayPokemon.baseStats as any)[s.key];
+                                    const iv = (displayPokemon.ivs as any)[s.key];
+                                    const max = 400; 
+                                    const statName = getStatName(s.key);
+                                    
+                                    return (
+                                      <div key={i} className="flex flex-col gap-0.5 md:gap-1">
+                                        <div className="flex justify-between items-center text-[8px] md:text-[10px] font-bold italic">
+                                          <div className="text-slate-500">{statName}</div>
+                                          <div className="text-slate-300">{currentLanguage.startsWith('zh') ? '种族' : 'Base'}: {base} / {currentLanguage.startsWith('zh') ? '个体' : 'IV'}: {iv}</div>
+                                        </div>
+                                        <div className="flex items-center gap-3 md:gap-4">
+                                          <div className="flex-1 h-1.5 md:h-2 bg-slate-100 rounded-full overflow-hidden">
+                                            <motion.div 
+                                              initial={{ width: 0 }}
+                                              animate={{ width: `${(val / max) * 100}%` }}
+                                              className={`h-full ${s.color}`}
+                                            />
+                                          </div>
+                                          <div className="w-6 md:w-8 text-right font-black italic text-xs md:text-sm">{val}</div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              <div className="relative">
+                                <h3 className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400 mb-4 md:mb-6 border-b border-slate-100 pb-2">{currentLanguage.startsWith('zh') ? '当前技能' : 'Current Moves'}</h3>
+                                <div className="grid grid-cols-1 gap-2 md:gap-3">
+                                  {displayPokemon.selectedMoves.map((m, i) => (
+                                    <div 
+                                      key={i} 
+                                      onMouseEnter={() => setHoveredMove(m)}
+                                      onMouseLeave={() => setHoveredMove(null)}
+                                      className="flex items-center justify-between p-2 md:p-3 bg-slate-50 border-l-4 border-slate-900 group hover:bg-slate-100 transition-colors cursor-help"
+                                    >
+                                      <div className="flex-1 min-w-0 pr-2">
+                                        <div className="font-black italic uppercase text-xs md:text-sm truncate">{getLocalized(m)}</div>
+                                        <div className="text-[8px] md:text-[10px] text-slate-400 font-bold italic truncate">
+                                          {currentLanguage.startsWith('zh') ? '威力' : 'Power'}: {m.power || '--'} / 
+                                          {currentLanguage.startsWith('zh') ? '命中' : 'Accuracy'}: {m.accuracy || '--'} / 
+                                          PP: {m.pp || '--'}
+                                        </div>
+                                      </div>
+                                      <TypeBadge type={m.type} size="xs" />
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* 技能详情浮层 */}
+                                <AnimatePresence>
+                                  {hoveredMove && (
+                                    <motion.div
+                                      initial={{ opacity: 0, y: 10 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      exit={{ opacity: 0, y: 10 }}
+                                      className="absolute bottom-full left-0 right-0 mb-2 md:mb-4 bg-slate-900 text-white p-3 md:p-4 shadow-2xl z-50 border-t-4 border-blue-500"
+                                    >
+                                      <div className="flex justify-between items-center mb-1 md:mb-2">
+                                        <div className="font-black italic text-sm md:text-lg">{getLocalized(hoveredMove)}</div>
+                                        <div className="text-[8px] md:text-[10px] px-2 py-0.5 bg-white text-slate-900 font-bold uppercase">{hoveredMove.damage_class === 'special' ? '特攻' : '物理'}</div>
+                                      </div>
+                                      <p className="text-[10px] md:text-xs text-slate-300 leading-relaxed italic">{getLocalizedDesc(hoveredMove)}</p>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-slate-900 p-3 md:p-4 flex justify-end flex-none">
+                          <button 
+                            onClick={() => {
+                              if (prevGameState === 'STARTER_SELECT') {
+                                setGameState(prevGameState);
+                              } else {
+                                setInfoPokemonIdx(null);
+                              }
+                            }}
+                            className="px-6 md:px-8 py-2 bg-white text-slate-900 font-black italic skew-x-[-12deg] hover:bg-blue-500 hover:text-white transition-all text-sm md:text-base"
+                          >
+                            <span className="skew-x-[12deg]">{t('back')}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </motion.div>
+              )}
             </motion.div>
           )}
+
+          {/* 进化动画 */}
+          <AnimatePresence>
+            {isEvolutionAnimating && evolutionTarget && evolvedPokemon && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[200] bg-white flex flex-col items-center justify-center overflow-hidden"
+              >
+                <EvolutionAnimation 
+                  from={evolutionTarget} 
+                  to={evolvedPokemon} 
+                  onComplete={() => {
+                    setIsEvolutionAnimating(false);
+                    setPendingRewardAction(null);
+                    setSelectedPokemonForEvolution(null);
+                    setEvolutionChoices([]);
+                    setEvolutionTarget(null);
+                    setEvolvedPokemon(null);
+                    finishReward();
+                  }}
+                  t={t}
+                  getLocalized={getLocalized}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {gameState === 'GAMEOVER' && (
             <motion.div 
