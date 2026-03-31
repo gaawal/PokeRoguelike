@@ -2691,18 +2691,19 @@ export default function App() {
                             referrerPolicy="no-referrer"
                           />
                         </div>
-                        <div className="flex items-center gap-1 mb-1">
-                          <h3 className="text-sm md:text-lg font-black italic uppercase tracking-tighter truncate max-w-[120px] md:max-w-[180px] text-center">{getLocalized(p)}</h3>
-                          {p.gender === 'male' && <Mars className="w-3 h-3 md:w-4 md:h-4 text-blue-500" />}
-                          {p.gender === 'female' && <Venus className="w-3 h-3 md:w-4 md:h-4 text-pink-500" />}
-                        </div>
-                        
-                        <div className="flex flex-wrap justify-center gap-1 mb-2">
-                          {p.types.map((t: any) => (
-                            <TypeBadge key={t.type.name} type={t.type.name} size="xs" className="skew-x-[-10deg]" />
-                          ))}
-                          <div className="bg-slate-100 px-1.5 py-0.5 rounded text-[8px] md:text-[10px] font-black italic text-slate-500 uppercase">
-                            {getLocalizedNature(p.nature)}
+                        <div className="flex flex-wrap items-center justify-center gap-2 mb-2">
+                          <div className="flex items-center gap-1">
+                            <h3 className="text-sm md:text-lg font-black italic uppercase tracking-tighter truncate max-w-[120px] md:max-w-[180px] text-center">{getLocalized(p)}</h3>
+                            {p.gender === 'male' && <Mars className="w-3 h-3 md:w-4 md:h-4 text-blue-500" />}
+                            {p.gender === 'female' && <Venus className="w-3 h-3 md:w-4 md:h-4 text-pink-500" />}
+                          </div>
+                          <div className="flex flex-wrap justify-center gap-1">
+                            {p.types.map((t: any) => (
+                              <TypeBadge key={t.type.name} type={t.type.name} size="xs" className="skew-x-[-10deg]" />
+                            ))}
+                            <div className="bg-slate-100 px-1.5 py-0.5 rounded text-[8px] md:text-[10px] font-black italic text-slate-500 uppercase">
+                              {getLocalizedNature(p.nature)}
+                            </div>
                           </div>
                         </div>
 
@@ -2996,21 +2997,21 @@ export default function App() {
                 <div className="absolute top-4 sm:top-8 right-4 sm:right-12 flex flex-col items-end">
                   <div className="bg-white p-2 sm:p-3 shadow-lg border-r-8 border-red-500 w-48 sm:w-72 skew-x-[-10deg] mb-2 sm:mb-4">
                     <div className="skew-x-[10deg] flex flex-col gap-0.5 sm:gap-1">
-                      <div className="flex justify-between items-end">
-                        <div className="flex items-center gap-1 sm:gap-2">
+                      <div className="flex justify-between items-center flex-wrap gap-y-1">
+                        <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
                           <span className="font-black text-sm sm:text-xl italic uppercase truncate max-w-[80px] sm:max-w-none">{getLocalized(enemy)}</span>
                           {enemy.status && (
                             <span className="bg-slate-900 text-white text-[6px] sm:text-[8px] px-1 py-0.5 font-black uppercase tracking-tighter">
                               {AILMENT_ZH[enemy.status] || enemy.status}
                             </span>
                           )}
+                          <div className="flex gap-1">
+                            {enemy.types.map(t => (
+                              <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
+                            ))}
+                          </div>
                         </div>
                         <span className="text-[8px] sm:text-xs font-bold bg-slate-900 text-white px-1.5 sm:px-2 py-0.5">Lv.{enemy.level}</span>
-                      </div>
-                      <div className="flex gap-1 mb-0.5 sm:mb-1">
-                        {enemy.types.map(t => (
-                          <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
-                        ))}
                       </div>
                       <div className="h-1.5 sm:h-2 bg-slate-200 rounded-none relative overflow-hidden border border-slate-300">
                         <motion.div 
@@ -3043,21 +3044,21 @@ export default function App() {
                   />
                   <div className="bg-white p-2 sm:p-3 shadow-lg border-l-8 border-blue-500 w-48 sm:w-72 skew-x-[-10deg] mt-[-20px] sm:mt-[-40px] relative z-20">
                     <div className="skew-x-[10deg] flex flex-col gap-0.5 sm:gap-1">
-                      <div className="flex justify-between items-end">
-                        <div className="flex items-center gap-1 sm:gap-2">
+                      <div className="flex justify-between items-center flex-wrap gap-y-1">
+                        <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
                           <span className="font-black text-sm sm:text-xl italic uppercase truncate max-w-[80px] sm:max-w-none">{getLocalized(playerTeam[0])}</span>
                           {playerTeam[0].status && (
                             <span className="bg-slate-900 text-white text-[6px] sm:text-[8px] px-1 py-0.5 font-black uppercase tracking-tighter">
                               {AILMENT_ZH[playerTeam[0].status] || playerTeam[0].status}
                             </span>
                           )}
+                          <div className="flex gap-1">
+                            {playerTeam[0].types.map(t => (
+                              <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
+                            ))}
+                          </div>
                         </div>
                         <span className="text-[8px] sm:text-xs font-bold bg-slate-900 text-white px-1.5 sm:px-2 py-0.5">Lv.{playerTeam[0].level}</span>
-                      </div>
-                      <div className="flex gap-1 mb-0.5 sm:mb-1">
-                        {playerTeam[0].types.map(t => (
-                          <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
-                        ))}
                       </div>
                       <div className="h-1.5 sm:h-2 bg-slate-200 rounded-none relative overflow-hidden border border-slate-300">
                         <motion.div 
@@ -3479,11 +3480,13 @@ export default function App() {
                                   referrerPolicy="no-referrer"
                                 />
                               </div>
-                              <h4 className="text-base font-black italic mb-1 uppercase leading-tight text-center">{getLocalized(reward.data)}</h4>
-                              <div className="flex justify-center gap-1 mt-1">
-                                {reward.data.types.map((t: any) => (
-                                  <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
-                                ))}
+                              <div className="flex flex-wrap items-center justify-center gap-2 mb-1">
+                                <h4 className="text-base font-black italic uppercase leading-tight text-center">{getLocalized(reward.data)}</h4>
+                                <div className="flex justify-center gap-1">
+                                  {reward.data.types.map((t: any) => (
+                                    <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
+                                  ))}
+                                </div>
                               </div>
                             </>
                           ) : (
@@ -3944,13 +3947,15 @@ export default function App() {
                                 />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="font-black italic text-base uppercase truncate text-slate-900">{getLocalized(tp)}</div>
-                                <div className="flex gap-1 mt-1">
-                                  {tp.types.map(t => (
-                                    <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
-                                  ))}
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <div className="font-black italic text-base uppercase truncate text-slate-900">{getLocalized(tp)}</div>
+                                  <div className="flex gap-1">
+                                    {tp.types.map(t => (
+                                      <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
+                                    ))}
+                                  </div>
                                 </div>
-                                <div className="mt-2 flex items-center gap-2">
+                                <div className="mt-1 flex items-center gap-2">
                                   <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                     <div 
                                       className="h-full bg-green-500 transition-all" 
