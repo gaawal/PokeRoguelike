@@ -1,4 +1,4 @@
-import { Pokemon, Move, GamePokemon, Stats, Nature } from '../types';
+import { Pokemon, Move, GamePokemon, Stats, Nature, Item } from '../types';
 import { GENERATIONS, NATURES } from '../constants';
 
 const BASE_URL = 'https://pokeapi.co/api/v2';
@@ -42,6 +42,8 @@ export async function fetchPokemon(id: number): Promise<Pokemon> {
     data.names = speciesData.names;
     const zhName = getZhName(speciesData.names);
     data.zhName = zhName || data.name;
+    data.genderRate = speciesData.gender_rate;
+    data.captureRate = speciesData.capture_rate;
     
     // Fetch ability names
     for (const a of data.abilities) {
@@ -238,6 +240,15 @@ export async function getProcessedPokemon(
   // Pick Nature: use existing one if provided, otherwise pick a random one
   const nature = existingNature || NATURES[Math.floor(Math.random() * NATURES.length)];
 
+  // Determine Gender
+  let gender: 'male' | 'female' | 'genderless' = 'genderless';
+  if (raw.genderRate !== -1 && raw.genderRate !== undefined) {
+    // genderRate is in eighths (0-8)
+    // 0 = 100% male, 8 = 100% female
+    const femaleChance = raw.genderRate / 8;
+    gender = Math.random() < femaleChance ? 'female' : 'male';
+  }
+
   // Base Stats
   const baseStats: Stats = {
     hp: raw.stats.find(s => s.stat.name === 'hp')?.base_stat || 50,
@@ -267,10 +278,12 @@ export async function getProcessedPokemon(
   return {
     ...raw,
     level,
+    captureRate: raw.captureRate || 255,
     maxHp: calculatedStats.hp,
     currentHp: calculatedStats.hp,
     selectedMoves: validMoves,
     nature,
+    gender,
     ivs,
     baseStats,
     calculatedStats,
@@ -284,4 +297,46 @@ export async function getProcessedPokemon(
       evasion: 0,
     }
   };
+}
+
+export async function fetchPokeBalls(): Promise<Item[]> {
+  try {
+    const response = await fetch(`${BASE_URL}/item-category/34`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    
+    const balls: Item[] = [];
+    for (const itemRef of data.items) {
+      try {
+        const itemRes = await fetch(itemRef.url);
+        const itemData = await itemRes.json();
+        
+        const zhName = getZhName(itemData.names);
+        const zhDescription = getZhDescription(itemData.flavor_text_entries);
+        
+        let ballModifier = 1.0;
+        if (itemData.name === 'poke-ball') ballModifier = 1.0;
+        else if (itemData.name === 'great-ball') ballModifier = 1.5;
+        else if (itemData.name === 'ultra-ball') ballModifier = 2.0;
+        else if (itemData.name === 'master-ball') ballModifier = 255;
+        
+        balls.push({
+          id: itemData.name,
+          name: itemData.name,
+          zhName: zhName || itemData.name,
+          description: itemData.effect_entries[0]?.short_effect || '',
+          zhDescription: zhDescription || '暂无描述',
+          isBall: true,
+          ballModifier,
+          sprite: itemData.sprites.default,
+          effect: (p) => p // Balls don't have a direct effect on stats
+        });
+      } catch (e) {
+        continue;
+      }
+    }
+    return balls;
+  } catch (e) {
+    return [];
+  }
 }

@@ -35,10 +35,13 @@ import {
   Circle,
   ShoppingCart,
   ArrowRight,
-  Coins
+  ArrowLeft,
+  Coins,
+  Mars,
+  Venus
 } from 'lucide-react';
-import { getProcessedPokemon, getRandomPokemonId, getLearnableMoves, fetchEvolutionChain, fetchPokemon } from './services/pokeApi';
-import { GamePokemon, GameState, Item, Move, BattleMenuTab, SUPPORTED_LANGUAGES, Nature, StatStages, Weather, Terrain, Dimension, Pokemon } from './types';
+import { getProcessedPokemon, getRandomPokemonId, getLearnableMoves, fetchEvolutionChain, fetchPokemon, fetchPokeBalls } from './services/pokeApi';
+import { GamePokemon, GameState, Item, Move, BattleMenuTab, SUPPORTED_LANGUAGES, Nature, StatStages, Weather, Terrain, Dimension, Pokemon, Stats } from './types';
 import { TYPE_CHART, TYPE_ZH, GENERATIONS } from './constants';
 
 // 属性颜色映射
@@ -210,7 +213,7 @@ const ALL_ITEMS: Item[] = [
     description: 'Used to catch wild Pokemon',
     zhDescription: '用于捕捉野生宝可梦',
     isBall: true,
-    catchRate: 1.0,
+    ballModifier: 1.0,
     effect: (p) => p
   },
   {
@@ -220,7 +223,7 @@ const ALL_ITEMS: Item[] = [
     description: 'Higher catch rate than Poke Ball',
     zhDescription: '比精灵球更容易捕捉',
     isBall: true,
-    catchRate: 1.5,
+    ballModifier: 1.5,
     effect: (p) => p
   },
   {
@@ -230,7 +233,7 @@ const ALL_ITEMS: Item[] = [
     description: 'Very high catch rate',
     zhDescription: '捕捉概率非常高',
     isBall: true,
-    catchRate: 2.0,
+    ballModifier: 2.0,
     effect: (p) => p
   },
   {
@@ -240,7 +243,7 @@ const ALL_ITEMS: Item[] = [
     description: 'The ultimate ball that never fails',
     zhDescription: '绝对能捕捉到宝可梦的终极球',
     isBall: true,
-    catchRate: 255, // 255 is guaranteed catch in my formula
+    ballModifier: 255, // 255 is guaranteed catch in my formula
     effect: (p) => p
   },
   {
@@ -475,6 +478,126 @@ const EvolutionAnimation = ({ from, to, onComplete, t, getLocalized }: {
   );
 };
 
+// 雷达图组件 (六边形战士)
+const RadarChart = ({ stats, t, calculatedStats }: { 
+  stats: { hp: number, attack: number, defense: number, spAtk: number, spDef: number, speed: number }, 
+  t: any,
+  calculatedStats?: { hp: number, attack: number, defense: number, spAtk: number, spDef: number, speed: number }
+}) => {
+  const size = 220;
+  const center = size / 2;
+  const radius = size * 0.3;
+  const angleStep = (Math.PI * 2) / 6;
+  
+  // 属性顺序: HP, 攻击, 防御, 速度, 特防, 特攻 (顺时针)
+  const statKeys = ['hp', 'attack', 'defense', 'speed', 'spDef', 'spAtk'] as const;
+  const maxStat = 255; // 种族值最大通常为255
+
+  const points = statKeys.map((key, i) => {
+    const val = stats[key];
+    const r = (val / maxStat) * radius;
+    const angle = i * angleStep - Math.PI / 2;
+    return {
+      x: center + r * Math.cos(angle),
+      y: center + r * Math.sin(angle)
+    };
+  });
+
+  const pointsStr = points.map(p => `${p.x},${p.y}`).join(' ');
+
+  // 背景网格
+  const gridLevels = [0.25, 0.5, 0.75, 1];
+  const gridPolygons = gridLevels.map(level => {
+    return statKeys.map((_, i) => {
+      const angle = i * angleStep - Math.PI / 2;
+      const r = radius * level;
+      return `${center + r * Math.cos(angle)},${center + r * Math.sin(angle)}`;
+    }).join(' ');
+  });
+
+  return (
+    <div className="relative flex flex-col items-center">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
+        {/* 背景网格 */}
+        {gridPolygons.map((p, i) => (
+          <polygon key={i} points={p} fill="none" stroke="#e2e8f0" strokeWidth="1" />
+        ))}
+        {/* 轴线 */}
+        {statKeys.map((_, i) => {
+          const angle = i * angleStep - Math.PI / 2;
+          return (
+            <line
+              key={i}
+              x1={center}
+              y1={center}
+              x2={center + radius * Math.cos(angle)}
+              y2={center + radius * Math.sin(angle)}
+              stroke="#e2e8f0"
+              strokeWidth="1"
+            />
+          );
+        })}
+        {/* 数据填充 */}
+        <polygon 
+          points={pointsStr} 
+          fill="rgba(59, 130, 246, 0.4)" 
+          stroke="#3b82f6" 
+          strokeWidth="2" 
+          className="drop-shadow-sm"
+        />
+        {/* 顶点标签和数值 */}
+        {statKeys.map((key, i) => {
+          const angle = i * angleStep - Math.PI / 2;
+          const labelRadius = radius + 25;
+          const x = center + labelRadius * Math.cos(angle);
+          const y = center + labelRadius * Math.sin(angle);
+          
+          const baseVal = stats[key];
+          const calcVal = calculatedStats ? calculatedStats[key] : null;
+
+          return (
+            <g key={key}>
+              <text
+                x={x}
+                y={y - 8}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                className="text-[10px] font-black italic fill-slate-400 uppercase"
+              >
+                {t(key)}
+              </text>
+              <text
+                x={x}
+                y={y + 4}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                className="text-[12px] font-black italic fill-slate-900"
+              >
+                {baseVal}
+              </text>
+              {calcVal !== null && (
+                <text
+                  x={x}
+                  y={y + 16}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="text-[9px] font-bold fill-blue-600"
+                >
+                  ({calcVal})
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-4 flex gap-4 text-[9px] font-bold italic uppercase tracking-widest">
+        <span className="text-slate-400">{t('baseStats')}</span>
+        <span className="text-blue-600">{t('actualStats')}</span>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [gameState, setGameState] = useState<GameState>('START');
   const [startStep, setStartStep] = useState(0); // 0: Title, 1: Region, 2: Level
@@ -544,9 +667,15 @@ export default function App() {
       specialReward: '特殊奖励',
       joinTeam: '加入队伍',
       selectThis: '选择此项',
-      mysteryShop: '神秘商店 (使用金币购买)',
-      insufficientCoins: '金币不足',
+      mysteryShop: '神秘商店',
       buyItem: '购买道具',
+      insufficientCoins: '金币不足',
+      winBattle: '胜利！击败了 {name}！',
+      terrain_grassy_heal: '{name} 通过青草场地恢复了体力！',
+      weatherDamage: '{name} 受到了天气伤害！',
+      dimension_magic_room_block: '魔法空间生效中，无法使用道具！',
+      catchSuccess: '捕捉成功！获得了 {coins} 金币！',
+      battleVictory: '胜利！获得了 {coins} 金币！',
       teamFull: '队伍已满！',
       replacePartner: '选择一只宝可梦进行替换，以加入新的伙伴',
       power: '威力',
@@ -556,9 +685,11 @@ export default function App() {
       ability: '特性',
       none: '无',
       stats: '能力值',
+      baseStats: '种族值',
+      actualStats: '最终能力',
       currentMoves: '当前技能',
       base: '种族',
-      iv: '个体',
+      iv: '个体值',
       physical: '物理',
       special: '特攻',
       status: '变化',
@@ -571,8 +702,6 @@ export default function App() {
       spAtk: '特攻',
       spDef: '特防',
       speed: '速度',
-      catchSuccess: '捕捉成功！获得了 {coins} 金币！',
-      battleVictory: '战斗胜利！获得了 {coins} 金币！',
       selectToLearn: '选择一只宝可梦来学习新的力量',
       retrievingMoves: '正在检索可学习的技能...',
       replaceWhichMove: '替换哪个技能？',
@@ -716,9 +845,11 @@ export default function App() {
       ability: '特性',
       none: '無',
       stats: '能力值',
+      baseStats: '種族值',
+      actualStats: '最終能力',
       currentMoves: '當前技能',
       base: '種族',
-      iv: '個體',
+      iv: '個體值',
       physical: '物理',
       special: '特攻',
       status: '變化',
@@ -876,6 +1007,8 @@ export default function App() {
       ability: 'Ability',
       none: 'None',
       stats: 'Stats',
+      baseStats: 'Base Stats',
+      actualStats: 'Final Stats',
       currentMoves: 'Current Moves',
       base: 'Base',
       iv: 'IV',
@@ -891,6 +1024,10 @@ export default function App() {
       spAtk: 'Sp. Atk',
       spDef: 'Sp. Def',
       speed: 'Speed',
+      winBattle: 'Victory! Defeated {name}!',
+      terrain_grassy_heal: '{name} restored HP from Grassy Terrain!',
+      weatherDamage: '{name} took damage from the weather!',
+      dimension_magic_room_block: 'Magic Room is in effect! Items cannot be used!',
       catchSuccess: 'Caught successfully! Earned {coins} coins!',
       battleVictory: 'Victory! Earned {coins} coins!',
       selectToLearn: 'Select a Pokemon to learn new power',
@@ -1095,6 +1232,18 @@ export default function App() {
   const [activeMoveType, setActiveMoveType] = useState<string | null>(null);
   const [isCatching, setIsCatching] = useState(false);
   const [catchSuccess, setCatchSuccess] = useState<boolean | null>(null);
+  const [shakeCount, setShakeCount] = useState(0);
+  const [pokeBalls, setPokeBalls] = useState<Item[]>([]);
+  const [battleTurnCount, setBattleTurnCount] = useState(1);
+  const [activeBall, setActiveBall] = useState<Item | null>(null);
+
+  useEffect(() => {
+    const loadBalls = async () => {
+      const balls = await fetchPokeBalls();
+      setPokeBalls(balls);
+    };
+    loadBalls();
+  }, []);
 
   const startGame = async () => {
     setLoading(true);
@@ -1216,7 +1365,8 @@ export default function App() {
   };
 
   const useItem = async (item: Item, index: number) => {
-    if (gameState !== 'BATTLE' || turn !== 'PLAYER' || isMessageProcessing) return;
+    if ((gameState !== 'BATTLE' && gameState !== 'BAG') || turn !== 'PLAYER' || isMessageProcessing) return;
+    if (gameState === 'BAG') setGameState('BATTLE');
 
     if (dimension === 'magic_room') {
       await addMessagesSequentially([t('dimension_magic_room_block')]);
@@ -1232,35 +1382,85 @@ export default function App() {
 
     if (item.isBall) {
       if (enemy?.isGym) {
-        await addMessagesSequentially(["不能捕捉道馆馆主的宝可梦！"]);
+        await addMessagesSequentially([t('cannotCatchGym')]);
         await executeEnemyTurn(playerTeam);
         return;
       }
 
-      // 捕捉逻辑
-      // 简化公式: catchRate = ((3 * maxHP - 2 * currentHP) * rate * ballModifier) / (3 * maxHP)
-      const ballModifier = item.catchRate || 1;
-      // 基础捕捉率 100
-      const catchRate = ((3 * enemy!.maxHp - 2 * enemy!.currentHp) * 100 * ballModifier) / (3 * enemy!.maxHp);
-      const random = Math.random() * 255; 
+      setActiveBall(item);
+      // 捕捉逻辑 (第七世代公式)
+      // a = ((3 * HPmax - 2 * HPcurrent) * Rate * BallMod) / (3 * HPmax) * StatusMod
+      const baseCatchRate = enemy!.captureRate || 100;
+      let ballModifier = item.ballModifier || 1.0;
+      
+      // 特殊球逻辑
+      if (item.id === 'timer-ball') {
+        ballModifier = Math.min(4, 1 + battleTurnCount * 0.3);
+      } else if (item.id === 'net-ball') {
+        const isWaterOrBug = enemy!.types.some(t => t.type.name === 'water' || t.type.name === 'bug');
+        if (isWaterOrBug) ballModifier = 3.5;
+      } else if (item.id === 'quick-ball') {
+        if (battleTurnCount === 1) ballModifier = 5.0;
+      } else if (item.id === 'dusk-ball') {
+        // 简单判定：如果是 5 的倍数关卡（BOSS战通常在洞穴或晚上感觉）
+        if (stage % 5 === 0) ballModifier = 3.0;
+      }
 
-      const isSuccess = random < catchRate;
+      // 异常状态修正
+      let statusMod = 1.0;
+      if (enemy!.status === 'sleep' || enemy!.status === 'freeze') statusMod = 2.5;
+      else if (enemy!.status === 'paralysis' || enemy!.status === 'poison' || enemy!.status === 'burn' || enemy!.status === 'toxic') statusMod = 1.5;
+
+      const a = Math.floor(((3 * enemy!.maxHp - 2 * enemy!.currentHp) * baseCatchRate * ballModifier) / (3 * enemy!.maxHp) * statusMod);
+      
+      // 判定逻辑 (随机数)
+      // Y = 65536 / (255 / a)^(1/4)
+      const y = a >= 255 ? 65535 : Math.floor(65536 * Math.pow(a / 255, 0.25));
+
       setIsCatching(true);
-      setCatchSuccess(isSuccess);
+      setShakeCount(0);
+      setCatchSuccess(null);
+
+      await addMessagesSequentially([t('catching')]);
+
+      let shakes = 0;
+      let caught = true;
+
+      if (a < 255) {
+        for (let i = 0; i < 4; i++) {
+          // 模拟摇晃等待
+          await new Promise(resolve => setTimeout(resolve, 800));
+          const rand = Math.floor(Math.random() * 65536);
+          if (rand >= y) {
+            caught = false;
+            break;
+          }
+          shakes++;
+          setShakeCount(shakes);
+        }
+      } else {
+        // 大师球或必中
+        for (let i = 1; i <= 4; i++) {
+          await new Promise(resolve => setTimeout(resolve, 800));
+          setShakeCount(i);
+        }
+        shakes = 4;
+      }
+
+      setCatchSuccess(caught);
       
-      await addMessagesSequentially(["正在捕捉..."]);
-      
-      if (isSuccess) {
-        await addMessagesSequentially([`成功捕捉了 ${getLocalized(enemy!)}！`]);
+      if (caught) {
+        await addMessagesSequentially([t('catchSuccessMsg').replace('{name}', getLocalized(enemy!))]);
         
         // 加入队伍
         if (playerTeam.length < 6) {
           setPlayerTeam(prev => [...prev, { ...enemy!, currentHp: enemy!.maxHp }]);
-          await addMessagesSequentially([`${getLocalized(enemy!)} 已加入你的队伍！`]);
+          await addMessagesSequentially([t('joinedTeam').replace('{name}', getLocalized(enemy!))]);
           setTimeout(() => {
             winBattle(true);
             setIsCatching(false);
             setCatchSuccess(null);
+            setShakeCount(0);
           }, 500);
         } else {
           setShowReplaceUI({ ...enemy!, currentHp: enemy!.maxHp });
@@ -1268,13 +1468,17 @@ export default function App() {
             winBattle(true);
             setIsCatching(false);
             setCatchSuccess(null);
+            setShakeCount(0);
           }, 500);
         }
       } else {
-        await addMessagesSequentially([`${getLocalized(enemy!)} 挣脱了！`]);
-        // 立即恢复精灵展示，不再等待气泡动画完全结束
-        setIsCatching(false);
-        setCatchSuccess(null);
+        await addMessagesSequentially([t('brokeFree').replace('{name}', getLocalized(enemy!))]);
+        // 立即恢复精灵展示
+        setTimeout(() => {
+          setIsCatching(false);
+          setCatchSuccess(null);
+          setShakeCount(0);
+        }, 1000);
         await executeEnemyTurn(playerTeam);
       }
       return;
@@ -1292,7 +1496,8 @@ export default function App() {
   };
 
   const switchPokemon = async (index: number) => {
-    if (gameState !== 'BATTLE' || index === 0 || isMessageProcessing) return;
+    if ((gameState !== 'BATTLE' && gameState !== 'POKEMON_INFO') || index === 0 || isMessageProcessing) return;
+    if (gameState === 'POKEMON_INFO') setGameState('BATTLE');
     if (!isFaintedReplacement && turn !== 'PLAYER') return;
     
     const newTeam = [...playerTeam];
@@ -1927,6 +2132,7 @@ export default function App() {
       }
     } else {
       await decrementEnvironments();
+      setBattleTurnCount(prev => prev + 1);
       setTurn('PLAYER');
       setBattleMenuTab('MAIN');
     }
@@ -1964,6 +2170,17 @@ export default function App() {
     }
   };
 
+  const getTypeEffectiveness = (moveType: string, defenderTypes: { type: { name: string } }[]) => {
+    let multiplier = 1;
+    defenderTypes.forEach(t => {
+      const effect = TYPE_CHART[moveType]?.[t.type.name];
+      if (effect !== undefined) {
+        multiplier *= effect;
+      }
+    });
+    return multiplier;
+  };
+
   const calculateDamage = (move: Move, attacker: GamePokemon, defender: GamePokemon, atkBuff: boolean, defBuff: boolean) => {
     if (move.damage_class === 'status') {
       return { damage: 0, multiplier: 1, isMiss: false, isCrit: false };
@@ -1981,135 +2198,99 @@ export default function App() {
     }
 
     const basePower = move.power || 40;
-    const levelMult = (2 * attacker.level / 5) + 2;
     
-    let atk = 50;
-    let def = 50;
+    // 1. Calculate Level Factor
+    const levelFactor = Math.floor(2 * attacker.level / 5) + 2;
     
-    // Wonder Room: Swap Def and SpDef
-    const defStat = dimension === 'wonder_room' ? defender.calculatedStats.spDef : defender.calculatedStats.defense;
-    const spDefStat = dimension === 'wonder_room' ? defender.calculatedStats.defense : defender.calculatedStats.spDef;
-    const defStage = dimension === 'wonder_room' ? defender.statStages.spDef : defender.statStages.defense;
-    const spDefStage = dimension === 'wonder_room' ? defender.statStages.defense : defender.statStages.spDef;
-
+    // 2. Determine Attack and Defense stats
+    let atk = 1;
+    let def = 1;
+    
     const ignoreDefenderStages = attacker.abilities.some(a => a.ability.name === 'unaware');
     const ignoreAttackerStages = defender.abilities.some(a => a.ability.name === 'unaware');
 
-    if (move.damage_class === 'special') {
-      atk = attacker.calculatedStats.spAtk * (ignoreAttackerStages ? 1 : (STAT_STAGE_MODIFIERS[attacker.statStages.spAtk as keyof typeof STAT_STAGE_MODIFIERS] || 1));
-      def = spDefStat * (ignoreDefenderStages ? 1 : (STAT_STAGE_MODIFIERS[spDefStage as keyof typeof STAT_STAGE_MODIFIERS] || 1));
-    } else {
-      atk = attacker.calculatedStats.attack * (ignoreAttackerStages ? 1 : (STAT_STAGE_MODIFIERS[attacker.statStages.attack as keyof typeof STAT_STAGE_MODIFIERS] || 1));
-      def = defStat * (ignoreDefenderStages ? 1 : (STAT_STAGE_MODIFIERS[defStage as keyof typeof STAT_STAGE_MODIFIERS] || 1));
-    }
-    
-    // Snow: Ice types get 1.5x Defense
-    if (weather === 'snow' && defender.types.some(t => t.type.name === 'ice') && move.damage_class === 'physical') {
-      def *= 1.5;
-    }
-    // Sandstorm: Rock types get 1.5x SpDef
-    if (weather === 'sandstorm' && defender.types.some(t => t.type.name === 'rock') && move.damage_class === 'special') {
-      def *= 1.5;
-    }
-    
-    // 异常状态影响
-    if (attacker.status === 'burn' && move.damage_class === 'physical') {
-      atk *= 0.5;
-    }
-
-    // 属性克制
-    let multiplier = 1;
-
-    // Ability: Levitate
-    if (move.type === 'ground' && defender.abilities.some(a => a.ability.name === 'levitate')) {
-      return { damage: 0, multiplier: 0, isMiss: false, isCrit: false };
-    }
-
-    // Ability: Water Absorb / Volt Absorb
-    if (move.type === 'water' && defender.abilities.some(a => a.ability.name === 'water-absorb')) {
-      return { damage: -Math.floor(defender.maxHp / 4), multiplier: 0, isMiss: false, isCrit: false };
-    }
-    if (move.type === 'electric' && defender.abilities.some(a => a.ability.name === 'volt-absorb')) {
-      return { damage: -Math.floor(defender.maxHp / 4), multiplier: 0, isMiss: false, isCrit: false };
-    }
-
-    defender.types.forEach(t => {
-      let typeMult = TYPE_CHART[move.type]?.[t.type.name];
-      if (typeMult !== undefined) {
-        // Delta Stream: Flying weaknesses removed
-        if (weather === 'strong_winds' && t.type.name === 'flying' && typeMult > 1) {
-          typeMult = 1;
-        }
-        multiplier *= typeMult;
-      }
-    });
-
-    // 天气影响
-    if (weather === 'sunny' || weather === 'harsh_sunlight') {
-      if (move.type === 'fire') multiplier *= 1.5;
-      if (move.type === 'water') {
-        if (weather === 'harsh_sunlight') multiplier = 0;
-        else multiplier *= 0.5;
-      }
-    } else if (weather === 'rainy' || weather === 'heavy_rain') {
-      if (move.type === 'water') multiplier *= 1.5;
-      if (move.type === 'fire') {
-        if (weather === 'heavy_rain') multiplier = 0;
-        else multiplier *= 0.5;
-      }
-    }
-
-    // Terrain influence
-    const isAttackerGrounded = !attacker.types.some(t => t.type.name === 'flying');
-    const isDefenderGrounded = !defender.types.some(t => t.type.name === 'flying');
-    
-    if (isAttackerGrounded) {
-      if (terrain === 'electric' && move.type === 'electric') multiplier *= 1.3;
-      if (terrain === 'grassy' && move.type === 'grass') multiplier *= 1.3;
-      if (terrain === 'psychic' && move.type === 'psychic') multiplier *= 1.3;
-    }
-    if (isDefenderGrounded && terrain === 'misty' && move.type === 'dragon') {
-      multiplier *= 0.5;
-    }
-
-    // 命中判断
-    const accStage = attacker.statStages.accuracy;
-    const evaStage = defender.statStages.evasion;
-    const combinedStage = Math.max(-6, Math.min(6, accStage - evaStage));
-    const accuracyMod = ACC_EVA_STAGE_MODIFIERS[combinedStage as keyof typeof ACC_EVA_STAGE_MODIFIERS] || 1;
-    let finalAccuracy = (move.accuracy || 100) * accuracyMod;
-
-    // Weather accuracy
-    if ((move.name === 'thunder' || move.name === 'hurricane') && (weather === 'rainy' || weather === 'heavy_rain')) {
-      finalAccuracy = 1000; // Always hit
-    }
-    if ((move.name === 'thunder' || move.name === 'hurricane') && (weather === 'sunny' || weather === 'harsh_sunlight')) {
-      finalAccuracy *= 0.5;
-    }
-    
-    if (Math.random() * 100 > finalAccuracy && move.accuracy !== null) {
-      return { damage: 0, multiplier: 0, isMiss: true, isCrit: false };
-    }
-
-    // 会心一击判断
+    // Critical Hit check
     let critChance = 1/24;
     if (move.critRate === 1) critChance = 1/8;
     if (move.critRate === 2) critChance = 1/2;
     if (move.critRate >= 3) critChance = 1;
-    
     const isCrit = Math.random() < critChance;
-    const critMult = isCrit ? 1.5 : 1;
+
+    if (move.damage_class === 'special') {
+      let atkStage = attacker.statStages.spAtk;
+      if (isCrit && atkStage < 0) atkStage = 0;
+      atk = attacker.calculatedStats.spAtk * (ignoreAttackerStages ? 1 : (STAT_STAGE_MODIFIERS[atkStage as keyof typeof STAT_STAGE_MODIFIERS] || 1));
+      
+      let defStage = defender.statStages.spDef;
+      if (isCrit && defStage > 0) defStage = 0;
+      def = defender.calculatedStats.spDef * (ignoreDefenderStages ? 1 : (STAT_STAGE_MODIFIERS[defStage as keyof typeof STAT_STAGE_MODIFIERS] || 1));
+      
+      // Sandstorm: Rock types get 1.5x SpDef
+      if (weather === 'sandstorm' && defender.types.some(t => t.type.name === 'rock')) {
+        def = Math.floor(def * 1.5);
+      }
+    } else {
+      let atkStage = attacker.statStages.attack;
+      if (isCrit && atkStage < 0) atkStage = 0;
+      atk = attacker.calculatedStats.attack * (ignoreAttackerStages ? 1 : (STAT_STAGE_MODIFIERS[atkStage as keyof typeof STAT_STAGE_MODIFIERS] || 1));
+      
+      let defStage = defender.statStages.defense;
+      if (isCrit && defStage > 0) defStage = 0;
+      def = defender.calculatedStats.defense * (ignoreDefenderStages ? 1 : (STAT_STAGE_MODIFIERS[defStage as keyof typeof STAT_STAGE_MODIFIERS] || 1));
+      
+      // Snow: Ice types get 1.5x Defense
+      if (weather === 'snow' && defender.types.some(t => t.type.name === 'ice')) {
+        def = Math.floor(def * 1.5);
+      }
+    }
+
+    // Apply custom game buffs (e.g. from items or stage effects)
+    if (atkBuff) atk = Math.floor(atk * 1.5);
+    if (defBuff) def = Math.floor(def * 1.5);
+
+    // 3. Base Damage calculation
+    let damage = Math.floor(Math.floor(Math.floor(levelFactor * basePower * atk / def) / 50) + 2);
+
+    // 4. Modifiers
+    // Weather
+    if (weather === 'sunny' || weather === 'harsh_sunlight') {
+      if (move.type === 'fire') damage = Math.floor(damage * 1.5);
+      if (move.type === 'water') {
+        if (weather === 'harsh_sunlight') damage = 0;
+        else damage = Math.floor(damage * 0.5);
+      }
+    } else if (weather === 'rainy' || weather === 'heavy_rain') {
+      if (move.type === 'water') damage = Math.floor(damage * 1.5);
+      if (move.type === 'fire') {
+        if (weather === 'heavy_rain') damage = 0;
+        else damage = Math.floor(damage * 0.5);
+      }
+    }
+
+    // Critical Hit
+    if (isCrit) {
+      damage = Math.floor(damage * 1.5);
+    }
+
+    // Random Factor (0.85 - 1.00)
+    const randomFactor = (Math.floor(Math.random() * 16) + 85) / 100;
+    damage = Math.floor(damage * randomFactor);
 
     // STAB
-    const isStab = attacker.types.some(t => t.type.name === move.type);
-    const stabMult = isStab ? 1.5 : 1;
+    if (attacker.types.some(t => t.type.name === move.type)) {
+      damage = Math.floor(damage * 1.5);
+    }
 
-    let damage = Math.floor((((levelMult * basePower * atk / def) / 50) + 2) * (Math.random() * 0.15 + 0.85) * multiplier * critMult * stabMult);
-    
-    if (atkBuff) damage = Math.floor(damage * 1.5);
-    if (defBuff) damage = Math.floor(damage * 0.7);
-    
-    return { damage, multiplier, isMiss: false, isCrit };
+    // Type Effectiveness
+    const typeMultiplier = getTypeEffectiveness(move.type, defender.types);
+    damage = Math.floor(damage * typeMultiplier);
+
+    // Burn
+    if (attacker.status === 'burn' && move.damage_class === 'physical') {
+      damage = Math.floor(damage * 0.5);
+    }
+
+    return { damage: Math.max(1, damage), multiplier: typeMultiplier, isMiss: false, isCrit };
   };
 
   const generateRewardSet = async () => {
@@ -2154,8 +2335,9 @@ export default function App() {
     for (let i = 0; i < 3; i++) {
       let item;
       let attempts = 0;
+      const allAvailableItems = [...ALL_ITEMS, ...pokeBalls];
       do {
-        item = ALL_ITEMS[Math.floor(Math.random() * ALL_ITEMS.length)];
+        item = allAvailableItems[Math.floor(Math.random() * allAvailableItems.length)];
         attempts++;
       } while (usedItems.has(item.id) && attempts < 10);
       usedItems.add(item.id);
@@ -2500,30 +2682,46 @@ export default function App() {
                         <div className="absolute top-1 right-1 md:top-2 md:right-2 bg-slate-100 px-1.5 py-0.5 text-[8px] md:text-[10px] font-black italic">
                           Lv.{p.level}
                         </div>
-                        <div className="relative mb-2 md:mb-4">
+                        <div className="relative mb-1 md:mb-2">
                           <div className={`absolute inset-0 bg-blue-50 rounded-full scale-110 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`}></div>
                           <img 
                             src={p.sprites.front_default} 
                             alt={getLocalized(p)} 
-                            className="w-20 h-20 md:w-32 md:h-32 object-contain relative z-10 drop-shadow-lg"
+                            className="w-16 h-16 md:w-24 md:h-24 object-contain relative z-10 drop-shadow-lg"
                             referrerPolicy="no-referrer"
                           />
                         </div>
-                        <h3 className="text-sm md:text-xl font-black italic mb-1 uppercase tracking-tighter truncate w-full text-center">{getLocalized(p)}</h3>
-                        <div className="flex gap-1 mb-2">
+                        <div className="flex items-center gap-1 mb-1">
+                          <h3 className="text-sm md:text-lg font-black italic uppercase tracking-tighter truncate max-w-[120px] md:max-w-[180px] text-center">{getLocalized(p)}</h3>
+                          {p.gender === 'male' && <Mars className="w-3 h-3 md:w-4 md:h-4 text-blue-500" />}
+                          {p.gender === 'female' && <Venus className="w-3 h-3 md:w-4 md:h-4 text-pink-500" />}
+                        </div>
+                        
+                        <div className="flex flex-wrap justify-center gap-1 mb-2">
                           {p.types.map((t: any) => (
                             <TypeBadge key={t.type.name} type={t.type.name} size="xs" className="skew-x-[-10deg]" />
                           ))}
+                          <div className="bg-slate-100 px-1.5 py-0.5 rounded text-[8px] md:text-[10px] font-black italic text-slate-500 uppercase">
+                            {getLocalizedNature(p.nature)}
+                          </div>
                         </div>
 
-                        <div className="w-full space-y-1 mb-2 hidden md:block">
-                          <div className="text-[8px] font-black uppercase text-slate-400 tracking-widest">{t('startingMoves')}</div>
-                          {p.selectedMoves.slice(0, 2).map((m, mi) => (
-                            <div key={mi} className="flex justify-between items-center bg-slate-50 p-1 text-[8px] font-bold italic border-l-2 border-slate-200">
-                              <span className="truncate pr-1">{getLocalized(m)}</span>
-                              <TypeBadge type={m.type} size="xs" />
-                            </div>
-                          ))}
+                        <div className="w-full space-y-1 mb-3">
+                          <div className="text-[7px] md:text-[8px] font-black uppercase text-slate-400 tracking-widest mb-1">{t('startingMoves')}</div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                            {p.selectedMoves.slice(0, 4).map((m, mi) => (
+                              <div key={mi} className="flex justify-between items-center bg-slate-50 p-1 text-[7px] md:text-[8px] font-bold italic border-l-2 border-slate-200">
+                                <span className="truncate pr-1">{getLocalized(m)}</span>
+                                <TypeBadge type={m.type} size="xs" />
+                              </div>
+                            ))}
+                            {/* Fill empty slots if less than 4 moves */}
+                            {Array.from({ length: Math.max(0, 4 - p.selectedMoves.length) }).map((_, i) => (
+                              <div key={`empty-${i}`} className="bg-slate-50/50 p-1 text-[8px] font-bold italic border-l-2 border-slate-100 text-slate-300">
+                                --
+                              </div>
+                            ))}
+                          </div>
                         </div>
                         
                         <button
@@ -2670,7 +2868,7 @@ export default function App() {
                 >
                   <div className="mb-8 flex items-center justify-between">
                     <button onClick={() => setStartStep(prev => prev - 1)} className="text-slate-400 font-black italic hover:text-slate-900 flex items-center gap-2">
-                      <ChevronRight className="w-5 h-5 rotate-180" /> 返回
+                      <ArrowLeft className="w-5 h-5" /> {t('back')}
                     </button>
                     <div className="flex gap-2">
                       {[1, 2].map(i => (
@@ -2920,36 +3118,48 @@ export default function App() {
                       className="absolute top-32 sm:top-48 right-12 sm:right-24 z-50 flex flex-col items-center"
                     >
                       {/* 精灵球本体 */}
-                      {!(catchSuccess === false && battleLog[battleLog.length-1]?.includes('挣脱')) && (
-                        <motion.div 
-                          animate={catchSuccess === false ? { 
-                            rotate: [0, -15, 15, -15, 15, 0],
-                            x: [0, -5, 5, -5, 5, 0]
-                          } : {}}
-                          transition={{ 
-                            repeat: Infinity, 
-                            duration: 0.5,
-                            repeatDelay: 1
-                          }}
-                          className="relative w-16 h-16 sm:w-24 sm:h-24 rounded-full border-4 border-slate-900 overflow-hidden bg-white shadow-2xl"
-                        >
-                          <div className="absolute top-0 left-0 w-full h-1/2 bg-red-500 border-b-4 border-slate-900"></div>
-                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-white border-4 border-slate-900 z-10">
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-slate-200"></div>
+                      <motion.div 
+                        key={shakeCount + (catchSuccess === false ? '-fail' : '')}
+                        animate={catchSuccess === false ? { 
+                          scale: [1, 1.5, 0],
+                          opacity: [1, 1, 0],
+                          rotate: [0, 20, -20, 0]
+                        } : shakeCount > 0 && catchSuccess === null ? { 
+                          rotate: [0, -20, 20, -20, 20, 0],
+                          x: [0, -8, 8, -8, 8, 0]
+                        } : {}}
+                        transition={{ 
+                          duration: catchSuccess === false ? 0.4 : 0.6,
+                          ease: "easeInOut"
+                        }}
+                        className="relative w-16 h-16 sm:w-24 sm:h-24 flex items-center justify-center"
+                      >
+                        {activeBall?.sprite ? (
+                          <img 
+                            src={activeBall.sprite} 
+                            className="w-full h-full object-contain drop-shadow-2xl" 
+                            referrerPolicy="no-referrer" 
+                          />
+                        ) : (
+                          <div className="relative w-full h-full rounded-full border-4 border-slate-900 overflow-hidden bg-white shadow-2xl">
+                            <div className="absolute top-0 left-0 w-full h-1/2 bg-red-500 border-b-4 border-slate-900"></div>
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-white border-4 border-slate-900 z-10">
+                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-slate-200"></div>
+                            </div>
                           </div>
-                          {/* 成功捕获的高光 */}
-                          {catchSuccess === true && (
-                            <motion.div 
-                              animate={{ opacity: [0.2, 0.5, 0.2] }}
-                              transition={{ repeat: Infinity, duration: 2 }}
-                              className="absolute inset-0 bg-yellow-400/20"
-                            />
-                          )}
-                        </motion.div>
-                      )}
+                        )}
+                        {/* 成功捕获的高光 */}
+                        {catchSuccess === true && (
+                          <motion.div 
+                            animate={{ opacity: [0.2, 0.5, 0.2] }}
+                            transition={{ repeat: Infinity, duration: 2 }}
+                            className="absolute inset-0 bg-yellow-400/20 rounded-full"
+                          />
+                        )}
+                      </motion.div>
                       
                       {/* 成功捕获的星星特效 */}
-                      {catchSuccess === true && battleLog[battleLog.length-1]?.includes('成功捕捉') && (
+                      {catchSuccess === true && (
                         <div className="absolute inset-0 flex items-center justify-center">
                           {[...Array(8)].map((_, i) => (
                             <motion.div
@@ -3072,18 +3282,25 @@ export default function App() {
                                 <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><Sword className="w-4 h-4 sm:w-5 sm:h-5" /> 战斗</span>
                               </button>
                               <button 
-                                onClick={() => setBattleMenuTab('BAG')}
+                                onClick={() => {
+                                  setPrevGameState('BATTLE');
+                                  setGameState('BAG');
+                                }}
                                 className="group relative bg-yellow-500 text-white p-2 sm:p-3 font-black italic text-base sm:text-xl skew-x-[-10deg] hover:bg-yellow-600 transition-all overflow-hidden"
                               >
                                 <div className="absolute inset-0 bg-white/10 translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                                <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><Package className="w-4 h-4 sm:w-5 sm:h-5" /> 背包</span>
+                                <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><Package className="w-4 h-4 sm:w-5 sm:h-5" /> {t('bag')}</span>
                               </button>
                               <button 
-                                onClick={() => setBattleMenuTab('POKEMON')}
+                                onClick={() => {
+                                  setPrevGameState('BATTLE');
+                                  setGameState('POKEMON_INFO');
+                                  setInfoPokemonIdx(null);
+                                }}
                                 className="group relative bg-emerald-500 text-white p-2 sm:p-3 font-black italic text-base sm:text-xl skew-x-[-10deg] hover:bg-emerald-600 transition-all overflow-hidden"
                               >
                                 <div className="absolute inset-0 bg-white/10 translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                                <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><Dna className="w-4 h-4 sm:w-5 sm:h-5" /> 宝可梦</span>
+                                <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><Dna className="w-4 h-4 sm:w-5 sm:h-5" /> {t('pokemon')}</span>
                               </button>
                               <button 
                                 onClick={() => setGameState('GAMEOVER')}
@@ -3092,89 +3309,6 @@ export default function App() {
                                 <div className="absolute inset-0 bg-white/10 translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
                                 <span className="relative z-10 skew-x-[10deg] flex items-center justify-center gap-2"><RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" /> 逃跑</span>
                               </button>
-                            </motion.div>
-                          )}
-
-                          {turn === 'PLAYER' && battleMenuTab === 'BAG' && (
-                            <motion.div 
-                              key="items"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -10 }}
-                              className="space-y-4"
-                            >
-                              <div className="flex justify-between items-center">
-                                <h3 className="font-black italic flex items-center gap-2"><Package className="w-5 h-5" /> 我的背包</h3>
-                                <button onClick={() => setBattleMenuTab('MAIN')} className="text-xs font-bold text-slate-400 hover:text-slate-900 underline">返回</button>
-                              </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
-                                {inventory.length > 0 ? inventory.map((item, idx) => (
-                                  <button
-                                    key={idx}
-                                    onClick={() => useItem(item, idx)}
-                                    className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-none skew-x-[-4deg] transition-all text-left group"
-                                  >
-                                    <div className="skew-x-[4deg]">
-                                      <div className="font-black text-sm group-hover:text-blue-600">{getLocalized(item)}</div>
-                                      <div className="text-[10px] text-slate-500 mt-1 line-clamp-1">{getLocalizedDesc(item)}</div>
-                                    </div>
-                                  </button>
-                                )) : (
-                                  <div className="col-span-full py-8 text-center text-slate-300 font-bold italic">背包空空如也</div>
-                                )}
-                              </div>
-                            </motion.div>
-                          )}
-
-                          {(turn === 'PLAYER' || isFaintedReplacement) && battleMenuTab === 'POKEMON' && (
-                            <motion.div 
-                              key="pokemon-list"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -10 }}
-                              className="space-y-4"
-                            >
-                              <div className="flex justify-between items-center">
-                                <h3 className="font-black italic flex items-center gap-2"><Dna className="w-5 h-5" /> 我的队伍</h3>
-                                {!isFaintedReplacement && <button onClick={() => setBattleMenuTab('MAIN')} className="text-xs font-bold text-slate-400 hover:text-slate-900 underline">返回</button>}
-                              </div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
-                                {playerTeam.map((p, idx) => (
-                                  <div
-                                    key={idx}
-                                    className={`p-2 border skew-x-[-4deg] transition-all flex items-center gap-2 ${idx === 0 ? 'bg-blue-50 border-blue-500' : p.currentHp <= 0 ? 'opacity-50 bg-slate-100' : 'bg-white border-slate-200'}`}
-                                  >
-                                    <div className="skew-x-[4deg] flex items-center gap-2 w-full">
-                                      <img src={p.sprites.front_default} className="w-10 h-10 object-contain" referrerPolicy="no-referrer" />
-                                      <div className="flex-1 overflow-hidden">
-                                        <div className="font-black text-[10px] truncate uppercase">{getLocalized(p)}</div>
-                                        <div className="h-1.5 bg-slate-200 mt-1">
-                                          <div className="h-full bg-blue-500" style={{ width: `${(p.currentHp / p.maxHp) * 100}%` }}></div>
-                                        </div>
-                                      </div>
-                                      <div className="flex flex-col gap-1">
-                                        <button
-                                          disabled={p.currentHp <= 0 || idx === 0 || isMessageProcessing}
-                                          onClick={() => switchPokemon(idx)}
-                                          className="px-2 py-1 bg-blue-500 text-white text-[8px] font-black italic hover:bg-blue-600 disabled:opacity-50"
-                                        >
-                                          {t('switch')}
-                                        </button>
-                                        <button
-                                          onClick={() => {
-                                            setInfoPokemonIdx(idx);
-                                            setPrevGameState(gameState);
-                                            setGameState('POKEMON_INFO');
-                                          }}
-                                          className="px-2 py-1 bg-slate-900 text-white text-[8px] font-black italic hover:bg-slate-700"
-                                        >
-                                          {t('info')}
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
                             </motion.div>
                           )}
 
@@ -3188,7 +3322,9 @@ export default function App() {
                             >
                               <div className="flex justify-between items-center mb-2">
                                 <h3 className="font-black italic flex items-center gap-2 text-sm"><Zap className="w-4 h-4" /> {t('selectMove')}</h3>
-                                <button onClick={() => setBattleMenuTab('MAIN')} className="text-[10px] font-bold text-slate-400 hover:text-slate-900 underline">{t('back')}</button>
+                                <button onClick={() => setBattleMenuTab('MAIN')} className="text-[10px] font-black italic text-slate-400 hover:text-slate-900 flex items-center gap-1">
+                                  <ArrowLeft className="w-3 h-3" /> {t('back')}
+                                </button>
                               </div>
                               <div className="grid grid-cols-2 grid-rows-2 gap-2 flex-1 min-h-0">
                                 {playerTeam[0].selectedMoves.map((move, idx) => (
@@ -3423,9 +3559,11 @@ export default function App() {
                         <div className="mt-auto pt-4 flex-none">
                           <button 
                             onClick={() => setPendingRewardAction(null)}
-                            className="w-full py-3 bg-slate-800 text-white font-black italic skew-x-[-12deg] hover:bg-slate-700 transition-colors"
+                            className="w-full py-3 bg-slate-800 text-white font-black italic skew-x-[-12deg] hover:bg-slate-700 transition-colors flex items-center justify-center gap-2"
                           >
-                            <span className="skew-x-[12deg] inline-block">{t('back')}</span>
+                            <span className="skew-x-[12deg] inline-block flex items-center gap-2">
+                              <ArrowLeft className="w-4 h-4" /> {t('back')}
+                            </span>
                           </button>
                         </div>
                       </div>
@@ -3463,9 +3601,9 @@ export default function App() {
 
                             <button 
                               onClick={() => setSelectedNewMove(null)}
-                              className="mt-6 w-full py-3 bg-slate-100 text-slate-500 font-black italic hover:bg-slate-200 transition-all"
+                              className="mt-6 w-full py-3 bg-slate-100 text-slate-500 font-black italic hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
                             >
-                              {t('back')}
+                              <ArrowLeft className="w-4 h-4" /> {t('back')}
                             </button>
                           </div>
                         </div>
@@ -3496,9 +3634,11 @@ export default function App() {
                               <p className="text-slate-400 font-bold italic">{t('noMoreMoves')}</p>
                               <button 
                                 onClick={() => setLearningPokemonIdx(null)}
-                                className="mt-4 px-6 py-2 bg-slate-800 text-white font-black italic skew-x-[-10deg]"
+                                className="mt-4 px-6 py-2 bg-slate-800 text-white font-black italic skew-x-[-10deg] flex items-center gap-2 mx-auto"
                               >
-                                <span className="skew-x-[10deg] inline-block">{t('reselectPokemon')}</span>
+                                <span className="skew-x-[10deg] inline-block flex items-center gap-2">
+                                  <ArrowLeft className="w-4 h-4" /> {t('reselectPokemon')}
+                                </span>
                               </button>
                             </div>
                           )}
@@ -3546,9 +3686,11 @@ export default function App() {
                         <div className="mt-auto pt-4 flex-none">
                           <button 
                             onClick={() => setPendingRewardAction(null)}
-                            className="w-full py-3 bg-slate-800 text-white font-black italic skew-x-[-12deg] hover:bg-slate-700 transition-colors"
+                            className="w-full py-3 bg-slate-800 text-white font-black italic skew-x-[-12deg] hover:bg-slate-700 transition-colors flex items-center justify-center gap-2"
                           >
-                            <span className="skew-x-[12deg] inline-block">{t('back')}</span>
+                            <span className="skew-x-[12deg] inline-block flex items-center gap-2">
+                              <ArrowLeft className="w-4 h-4" /> {t('back')}
+                            </span>
                           </button>
                         </div>
                       </div>
@@ -3684,286 +3826,340 @@ export default function App() {
             </motion.div>
           )}
 
-          {gameState === 'POKEMON_INFO' && (
-            <motion.div
-              key="pokemon-info-container"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex-1 flex flex-col max-w-5xl mx-auto w-full overflow-hidden p-4"
+          {gameState === 'BAG' && (
+            <motion.div 
+              key="bag-full"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 z-[80] bg-slate-900/40 backdrop-blur-md p-4 md:p-8 flex flex-col"
             >
-              {infoPokemonIdx === null ? (
-                /* 队伍列表页 */
-                <div className="flex-1 flex flex-col bg-white shadow-2xl border-y-4 md:border-y-8 border-slate-900 overflow-hidden">
-                  <div className="bg-slate-900 p-4 flex justify-between items-center">
-                    <h2 className="text-white font-black italic text-xl uppercase tracking-tighter">{t('teamList')}</h2>
-                    <button 
-                      onClick={() => setGameState(prevGameState)}
-                      className="px-4 py-1 bg-white text-slate-900 font-black italic text-xs skew-x-[-10deg] hover:bg-blue-500 hover:text-white transition-all"
-                    >
-                      <span className="skew-x-[10deg]">{t('back')}</span>
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {playerTeam.map((p, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setInfoPokemonIdx(idx)}
-                          className="flex items-center gap-4 p-4 bg-slate-50 border-l-4 border-slate-900 hover:bg-slate-100 transition-all group text-left"
-                        >
-                          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform overflow-hidden">
-                            <img src={p.sprites.front_default} className="w-14 h-14 object-contain" referrerPolicy="no-referrer" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex justify-between items-end mb-1">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div className="font-black italic text-lg uppercase truncate">{getLocalized(p)}</div>
-                                {(() => {
-                                  const vCount = Object.values(p.ivs).filter(v => v === 31).length;
-                                  if (vCount > 0) {
-                                    return (
-                                      <div className="bg-yellow-400 text-slate-900 text-[8px] px-1 font-black skew-x-[-10deg] flex-none">
-                                        <span className="skew-x-[10deg] inline-block">{vCount}V</span>
-                                      </div>
-                                    );
-                                  }
-                                  return null;
-                                })()}
-                              </div>
-                              <div className="text-xs font-black text-slate-400 italic">LV.{p.level}</div>
-                            </div>
-                            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                              <motion.div 
-                                initial={{ width: 0 }}
-                                animate={{ width: `${(p.currentHp / p.maxHp) * 100}%` }}
-                                className={`h-full ${p.currentHp / p.maxHp > 0.5 ? 'bg-green-500' : p.currentHp / p.maxHp > 0.2 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                              />
-                            </div>
-                            <div className="flex justify-between text-[10px] font-bold italic text-slate-400 mt-1">
-                              <span>HP</span>
-                              <span>{p.currentHp} / {p.maxHp}</span>
-                            </div>
-                          </div>
-                          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-slate-900 transition-colors" />
-                        </button>
-                      ))}
-                    </div>
+              <div className="w-full max-w-5xl mx-auto flex-1 flex flex-col bg-white rounded-3xl shadow-2xl overflow-hidden border-4 border-slate-900">
+                <div className="p-4 md:p-6 bg-slate-900 text-white flex justify-between items-center">
+                  <h2 className="text-xl md:text-3xl font-black italic uppercase tracking-tighter flex items-center gap-3">
+                    <Package className="w-6 h-6 md:w-8 md:h-8 text-yellow-400" /> {t('bag')}
+                  </h2>
+                  <button 
+                    onClick={() => setGameState(prevGameState || 'BATTLE')}
+                    className="p-2 bg-white/10 text-white hover:bg-white/20 transition-all rounded-full"
+                  >
+                    <ArrowLeft className="w-6 h-6" />
+                  </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {inventory.length > 0 ? inventory.map((item, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => useItem(item, idx)}
+                        className="p-4 bg-slate-50 hover:bg-slate-100 border-2 border-slate-200 rounded-xl transition-all text-left group relative overflow-hidden"
+                      >
+                        <div className="absolute top-0 right-0 w-12 h-full bg-yellow-400/10 skew-x-[-20deg] translate-x-6 group-hover:translate-x-3 transition-transform"></div>
+                        <div className="relative z-10">
+                          <div className="font-black text-lg group-hover:text-blue-600 italic uppercase tracking-tighter">{getLocalized(item)}</div>
+                          <div className="text-xs text-slate-500 mt-1 font-bold leading-relaxed">{getLocalizedDesc(item)}</div>
+                        </div>
+                      </button>
+                    )) : (
+                      <div className="col-span-full py-20 text-center flex flex-col items-center gap-4">
+                        <Package className="w-16 h-16 text-slate-200" />
+                        <div className="text-slate-300 font-black italic text-2xl uppercase tracking-widest">背包空空如也</div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              ) : (
-                /* 宝可梦详情页 */
-                <motion.div
-                  key="pokemon-detail"
-                  initial={{ opacity: 0, x: 50 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex-1 flex flex-col overflow-hidden"
-                >
-                  {(() => {
-                    const displayPokemon = prevGameState === 'STARTER_SELECT' 
-                      ? starterOptions[infoPokemonIdx] 
-                      : playerTeam[infoPokemonIdx];
-                    
-                    return (
-                      <div className="bg-white shadow-2xl overflow-hidden border-y-4 md:border-y-8 border-slate-900 flex-1 flex flex-col">
-                        <div className="flex-1 overflow-y-auto custom-scrollbar">
-                          <div className="grid grid-cols-1 md:grid-cols-2">
-                            {/* 左侧：基本信息与大图 */}
-                            <div className="p-4 md:p-8 bg-slate-50 relative overflow-hidden">
-                              <div className="absolute top-0 right-0 p-2 md:p-4 opacity-20 md:opacity-100">
-                                <div className="text-4xl md:text-6xl font-black italic text-slate-200 tracking-tighter">
-                                  #{String(displayPokemon.id).padStart(3, '0')}
-                                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {gameState === 'POKEMON_INFO' && (
+            <motion.div 
+              key="pokemon_info"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="flex-1 flex flex-col overflow-hidden relative"
+            >
+              {(() => {
+                const infoSource = prevGameState === 'STARTER_SELECT' ? starterOptions : playerTeam;
+                const p = infoPokemonIdx !== null ? infoSource[infoPokemonIdx] : null;
+                const ability = p?.abilities?.[0]?.ability;
+
+                return (
+                  <div className="absolute inset-0 z-[150] bg-slate-50 flex flex-col p-4 md:p-8 overflow-hidden">
+                    {/* Background Stripes */}
+                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none overflow-hidden">
+                      <div className="absolute inset-0 rotate-12 scale-150 flex flex-col gap-4">
+                        {Array.from({ length: 20 }).map((_, i) => (
+                          <div key={i} className="h-12 bg-slate-900 w-full" />
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Header */}
+                    <div className="flex justify-between items-center mb-6 flex-none relative z-10">
+                      <div className="bg-blue-600 px-6 py-2 skew-x-[-12deg] shadow-xl">
+                        <h2 className="text-xl md:text-2xl font-black italic tracking-tighter skew-x-[12deg] text-white flex items-center gap-2">
+                          <Dna className="w-5 h-5" /> {prevGameState === 'STARTER_SELECT' ? t('chooseStarter') : t('myTeam')}
+                        </h2>
+                      </div>
+                      {!isFaintedReplacement && (
+                        <button 
+                          onClick={() => {
+                            if (infoPokemonIdx !== null) {
+                              if (prevGameState === 'STARTER_SELECT') {
+                                setGameState('STARTER_SELECT');
+                                setInfoPokemonIdx(null);
+                              } else {
+                                setInfoPokemonIdx(null);
+                              }
+                            } else {
+                              setGameState(prevGameState || 'MENU');
+                            }
+                          }}
+                          className="p-2 bg-slate-900/10 text-slate-900 hover:bg-slate-900/20 transition-all rounded-full"
+                        >
+                          <ArrowLeft className="w-6 h-6" />
+                        </button>
+                      )}
+                    </div>
+
+                    {infoPokemonIdx === null ? (
+                      /* Level 1: Team List */
+                      <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 relative z-10">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pb-8">
+                          {playerTeam.map((tp, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setInfoPokemonIdx(idx)}
+                              className="bg-white p-4 shadow-xl hover:shadow-2xl transition-all border-b-4 border-slate-100 hover:border-blue-500 group flex items-center gap-4 text-left"
+                            >
+                              <div className="relative">
+                                <div className="absolute inset-0 bg-blue-50 rounded-full scale-0 group-hover:scale-100 transition-transform" />
+                                <img 
+                                  src={tp.sprites.front_default} 
+                                  className="w-16 h-16 relative z-10 group-hover:scale-110 transition-transform" 
+                                  referrerPolicy="no-referrer" 
+                                />
                               </div>
-                              <div className="relative z-10">
-                                <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-8">
-                                  <div className="bg-slate-900 text-white px-3 py-1 skew-x-[-12deg] font-black italic text-sm md:text-xl">
-                                    <span className="skew-x-[12deg]">LV.{displayPokemon.level}</span>
-                                  </div>
-                                  <h2 className="text-2xl md:text-4xl font-black italic tracking-tighter uppercase truncate">{getLocalized(displayPokemon)}</h2>
-                                </div>
-                                <div className="flex gap-2 md:gap-3 mb-4 md:mb-8">
-                                  {displayPokemon.types.map(t => (
-                                    <TypeBadge key={t.type.name} type={t.type.name} size={window.innerWidth < 768 ? "sm" : "lg"} />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-black italic text-base uppercase truncate text-slate-900">{getLocalized(tp)}</div>
+                                <div className="flex gap-1 mt-1">
+                                  {tp.types.map(t => (
+                                    <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
                                   ))}
                                 </div>
-                                <div className="flex justify-center py-4 md:py-12">
-                                  <motion.img 
-                                    animate={{ y: [0, -10, 0] }}
-                                    transition={{ repeat: Infinity, duration: 3 }}
-                                    src={displayPokemon.sprites.front_default} 
-                                    className="w-40 h-40 md:w-64 md:h-64 object-contain drop-shadow-2xl" 
-                                    referrerPolicy="no-referrer" 
-                                  />
-                                </div>
-                                <div className="bg-white p-3 md:p-4 border-l-4 border-slate-900 shadow-sm">
-                                  <div className="text-[10px] font-black text-slate-400 uppercase mb-1">{currentLanguage.startsWith('zh') ? '特性' : 'Ability'}</div>
-                                  <div className="font-black italic text-base md:text-lg">
-                                    {getLocalized(displayPokemon.abilities[0]?.ability) || (currentLanguage.startsWith('zh') ? '无' : 'None')}
+                                <div className="mt-2 flex items-center gap-2">
+                                  <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-green-500 transition-all" 
+                                      style={{ width: `${(tp.currentHp / tp.maxHp) * 100}%` }}
+                                    />
                                   </div>
+                                  <span className="text-[10px] font-black italic text-slate-400">Lv.{tp.level}</span>
+                                </div>
+                                {prevGameState === 'BATTLE' && (
+                                  <div className="mt-3 flex gap-2">
+                                    <button
+                                      disabled={tp.currentHp <= 0 || idx === 0 || isMessageProcessing}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        switchPokemon(idx);
+                                      }}
+                                      className="flex-1 py-1.5 bg-blue-500 text-white text-[10px] font-black italic uppercase skew-x-[-10deg] hover:bg-blue-600 disabled:opacity-50 transition-all"
+                                    >
+                                      <span className="skew-x-[10deg] inline-block">{t('switch')}</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : p ? (
+                      /* Level 2: Pokemon Details */
+                      <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-3xl shadow-2xl relative z-10">
+                        {/* Background Stripes for Detail */}
+                        <div className="absolute inset-0 opacity-[0.03] pointer-events-none overflow-hidden">
+                          <div className="absolute inset-0 rotate-12 scale-150 flex flex-col gap-4">
+                            {Array.from({ length: 20 }).map((_, i) => (
+                              <div key={i} className="h-8 bg-slate-900 w-full" />
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 relative z-10">
+                          {/* Top Section: Image, Name, Stats Chart */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                            {/* Left: Basic Info */}
+                            <div className="flex flex-col items-center md:items-start text-center md:text-left">
+                              <div className="relative mb-4">
+                                <div className="absolute inset-0 bg-blue-50 rounded-full blur-2xl opacity-50" />
+                                <img 
+                                  src={p.sprites.front_default} 
+                                  className="w-48 h-48 md:w-64 md:h-64 object-contain drop-shadow-2xl relative z-10" 
+                                  referrerPolicy="no-referrer" 
+                                />
+                              </div>
+                              <h3 className="text-3xl md:text-5xl font-black italic uppercase tracking-tighter text-slate-900 mb-2 flex items-center gap-3">
+                                {getLocalized(p)}
+                                {p.gender === 'male' && <Mars className="w-6 h-6 text-blue-500" />}
+                                {p.gender === 'female' && <Venus className="w-6 h-6 text-pink-500" />}
+                              </h3>
+                              <div className="flex gap-2 mb-4">
+                                {p.types.map(t => (
+                                  <TypeBadge key={t.type.name} type={t.type.name} size="md" />
+                                ))}
+                              </div>
+                              <div className="grid grid-cols-2 gap-x-8 gap-y-2 w-full max-w-xs">
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-black italic text-slate-400 uppercase">{t('nature')}</span>
+                                  <span className="font-black italic text-slate-700">{getLocalizedNature(p.nature)}</span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-black italic text-slate-400 uppercase">Lv.</span>
+                                  <span className="font-black italic text-slate-700">{p.level}</span>
                                 </div>
                               </div>
                             </div>
 
-                            {/* 右侧：能力值与技能 */}
-                            <div className="p-4 md:p-8 bg-white">
-                              <div className="mb-6 md:mb-8">
-                                <div className="flex justify-between items-end mb-4 md:mb-6 border-b border-slate-100 pb-2">
-                                  <div className="flex items-center gap-3">
-                                    <h3 className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400">{currentLanguage.startsWith('zh') ? '能力值' : 'Stats'}</h3>
-                                    {(() => {
-                                      const vCount = Object.values(displayPokemon.ivs).filter(v => v === 31).length;
-                                      if (vCount > 0) {
-                                        return (
-                                          <div className="bg-yellow-400 text-slate-900 text-[8px] md:text-[10px] px-1.5 py-0.5 font-black skew-x-[-10deg] shadow-sm">
-                                            <span className="skew-x-[10deg] inline-block">{vCount}V</span>
-                                          </div>
-                                        );
-                                      }
-                                      return null;
-                                    })()}
-                                  </div>
-                                  <div className="text-[8px] md:text-[10px] font-bold text-blue-500 italic">
-                                    {getLocalizedNature(displayPokemon.nature)} {currentLanguage.startsWith('zh') ? '性格' : 'Nature'} 
-                                    ({displayPokemon.nature.plus ? `+${getStatName(displayPokemon.nature.plus)}` : ''}
-                                    {displayPokemon.nature.minus ? `, -${getStatName(displayPokemon.nature.minus)}` : ''})
-                                  </div>
-                                </div>
-                                <div className="space-y-2 md:space-y-3">
-                                  {[
-                                    { key: 'hp', color: 'bg-red-500' },
-                                    { key: 'attack', color: 'bg-orange-500' },
-                                    { key: 'defense', color: 'bg-yellow-500' },
-                                    { key: 'spAtk', color: 'bg-blue-500' },
-                                    { key: 'spDef', color: 'bg-green-500' },
-                                    { key: 'speed', color: 'bg-pink-500' }
-                                  ].map((s, i) => {
-                                    const val = (displayPokemon.calculatedStats as any)[s.key];
-                                    const base = (displayPokemon.baseStats as any)[s.key];
-                                    const iv = (displayPokemon.ivs as any)[s.key];
-                                    const max = 400; 
-                                    const statName = getStatName(s.key);
-                                    
-                                    return (
-                                      <div key={i} className="flex flex-col gap-0.5 md:gap-1">
-                                        <div className="flex justify-between items-center text-[8px] md:text-[10px] font-bold italic">
-                                          <div className="text-slate-500">{statName}</div>
-                                          <div className="text-slate-300">
-                                            {currentLanguage.startsWith('zh') ? '种族' : 'Base'}: {base} / 
-                                            <span className={iv === 31 ? "text-yellow-500 font-black" : ""}>
-                                              {currentLanguage.startsWith('zh') ? ' 个体' : ' IV'}: {iv}{iv === 31 ? ' (V)' : ''}
-                                            </span>
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-3 md:gap-4">
-                                          <div className="flex-1 h-1.5 md:h-2 bg-slate-100 rounded-full overflow-hidden">
-                                            <motion.div 
-                                              initial={{ width: 0 }}
-                                              animate={{ width: `${(val / max) * 100}%` }}
-                                              className={`h-full ${s.color}`}
-                                            />
-                                          </div>
-                                          <div className="w-6 md:w-8 text-right font-black italic text-xs md:text-sm">{val}</div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
+                            {/* Right: Radar Chart & Detailed Stats */}
+                            <div className="flex flex-col gap-6">
+                              <div className="flex items-center justify-center bg-slate-50/50 rounded-3xl p-4">
+                                <RadarChart stats={p.baseStats} t={t} calculatedStats={p.calculatedStats} />
                               </div>
+                              
+                              {/* Detailed Stats Table */}
+                              <div className="bg-slate-50 rounded-2xl p-4 overflow-hidden">
+                                <table className="w-full text-left border-collapse">
+                                  <thead>
+                                    <tr className="border-b border-slate-200">
+                                      <th className="py-2 text-[10px] font-black italic text-slate-400 uppercase">{t('stats')}</th>
+                                      <th className="py-2 text-[10px] font-black italic text-slate-400 uppercase text-center">{t('base')}</th>
+                                      <th className="py-2 text-[10px] font-black italic text-slate-400 uppercase text-center">{t('iv')}</th>
+                                      <th className="py-2 text-[10px] font-black italic text-slate-400 uppercase text-right">{t('actualStats')}</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {['hp', 'attack', 'defense', 'spAtk', 'spDef', 'speed'].map((key) => {
+                                      const isPlus = p.nature.plus === key;
+                                      const isMinus = p.nature.minus === key;
+                                      return (
+                                        <tr key={key} className="border-b border-slate-100 last:border-0">
+                                          <td className="py-2 text-xs font-black italic text-slate-600 uppercase flex items-center gap-1">
+                                            {t(key)}
+                                            {isPlus && <span className="text-[10px] text-red-500 font-bold">↑</span>}
+                                            {isMinus && <span className="text-[10px] text-blue-500 font-bold">↓</span>}
+                                          </td>
+                                          <td className="py-2 text-xs font-bold text-slate-500 text-center">{p.baseStats[key as keyof Stats]}</td>
+                                          <td className="py-2 text-xs font-bold text-slate-500 text-center">{p.ivs[key as keyof Stats]}</td>
+                                          <td className="py-2 text-sm font-black italic text-slate-900 text-right">{p.calculatedStats[key as keyof Stats]}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
 
-                              <div className="relative">
-                                <h3 className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400 mb-4 md:mb-6 border-b border-slate-100 pb-2">{currentLanguage.startsWith('zh') ? '当前技能' : 'Current Moves'}</h3>
-                                <div className="grid grid-cols-1 gap-2 md:gap-3">
-                                  {displayPokemon.selectedMoves.map((m, i) => (
-                                    <div 
-                                      key={i} 
-                                      onMouseEnter={() => setHoveredMove(m)}
-                                      onMouseLeave={() => setHoveredMove(null)}
-                                      className="flex items-center justify-between p-2 md:p-3 bg-slate-50 border-l-4 border-slate-900 group hover:bg-slate-100 transition-colors cursor-help"
-                                    >
-                                      <div className="flex-1 min-w-0 pr-2">
-                                        <div className="font-black italic uppercase text-xs md:text-sm truncate">{getLocalized(m)}</div>
-                                        <div className="text-[8px] md:text-[10px] text-slate-400 font-bold italic truncate">
-                                          {currentLanguage.startsWith('zh') ? '威力' : 'Power'}: {m.power || '--'} / 
-                                          {currentLanguage.startsWith('zh') ? '命中' : 'Accuracy'}: {m.accuracy || '--'} / 
-                                          PP: {m.pp || '--'}
-                                        </div>
-                                      </div>
-                                      <TypeBadge type={m.type} size="xs" />
+                          {/* Middle Section: Moves */}
+                          <div className="mb-8">
+                            <div className="flex items-center gap-2 mb-4">
+                              <Zap className="w-5 h-5 text-yellow-500" />
+                              <h4 className="text-lg font-black italic uppercase text-slate-900">{t('currentMoves')}</h4>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {p.selectedMoves.map((move, i) => (
+                                <div key={i} className="bg-slate-50 p-4 border-l-4 border-blue-500 flex justify-between items-center">
+                                  <div>
+                                    <div className="font-black italic uppercase text-slate-900">{getLocalized(move)}</div>
+                                    <div className="flex gap-2 mt-1">
+                                      <TypeBadge type={move.type} size="xs" />
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                        {move.damage_class === 'special' ? t('special') : move.damage_class === 'physical' ? t('physical') : t('status')}
+                                      </span>
                                     </div>
-                                  ))}
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-[10px] font-black italic text-slate-400 uppercase">{t('power')}</div>
+                                    <div className="font-black italic text-slate-900">{move.power || '--'}</div>
+                                  </div>
                                 </div>
+                              ))}
+                            </div>
+                          </div>
 
-                                {/* 技能详情浮层 */}
-                                <AnimatePresence>
-                                  {hoveredMove && (
-                                    <motion.div
-                                      initial={{ opacity: 0, y: 10 }}
-                                      animate={{ opacity: 1, y: 0 }}
-                                      exit={{ opacity: 0, y: 10 }}
-                                      className="absolute bottom-full left-0 right-0 mb-2 md:mb-4 bg-slate-900 text-white p-3 md:p-4 shadow-2xl z-50 border-t-4 border-blue-500"
-                                    >
-                                      <div className="flex justify-between items-center mb-1 md:mb-2">
-                                        <div className="font-black italic text-sm md:text-lg">{getLocalized(hoveredMove)}</div>
-                                        <div className="text-[8px] md:text-[10px] px-2 py-0.5 bg-white text-slate-900 font-bold uppercase">{hoveredMove.damage_class === 'special' ? '特攻' : '物理'}</div>
-                                      </div>
-                                      <p className="text-[10px] md:text-xs text-slate-300 leading-relaxed italic">{getLocalizedDesc(hoveredMove)}</p>
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
+                          {/* Bottom Section: Ability */}
+                          <div>
+                            <div className="flex items-center gap-2 mb-4">
+                              <Sparkles className="w-5 h-5 text-purple-500" />
+                              <h4 className="text-lg font-black italic uppercase text-slate-900">{t('ability')}</h4>
+                            </div>
+                            <div className="bg-purple-50 p-5 border-l-4 border-purple-500">
+                              <div className="font-black italic text-purple-900 uppercase mb-1">
+                                {getLocalized(ability)}
                               </div>
+                              <p className="text-xs font-bold text-purple-700/70 italic leading-relaxed">
+                                {getLocalizedDesc(ability)}
+                              </p>
                             </div>
                           </div>
                         </div>
-                        <div className="bg-slate-900 p-3 md:p-4 flex justify-end flex-none">
+
+                        {/* Back Button for Detail View */}
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex-none">
                           <button 
                             onClick={() => {
                               if (prevGameState === 'STARTER_SELECT') {
-                                setGameState(prevGameState);
+                                setGameState('STARTER_SELECT');
+                                setInfoPokemonIdx(null);
                               } else {
                                 setInfoPokemonIdx(null);
                               }
                             }}
-                            className="px-6 md:px-8 py-2 bg-white text-slate-900 font-black italic skew-x-[-12deg] hover:bg-blue-500 hover:text-white transition-all text-sm md:text-base"
+                            className="w-full py-3 bg-slate-900 text-white font-black italic skew-x-[-10deg] hover:bg-blue-600 transition-all flex items-center justify-center gap-2"
                           >
-                            <span className="skew-x-[12deg]">{t('back')}</span>
+                            <span className="skew-x-[10deg] inline-block uppercase flex items-center gap-2">
+                              <ArrowLeft className="w-4 h-4" /> {t('back')}
+                            </span>
                           </button>
                         </div>
                       </div>
-                    );
-                  })()}
-                </motion.div>
-              )}
+                    ) : null}
+                  </div>
+                );
+              })()}
             </motion.div>
           )}
 
-          {/* 进化动画 */}
-          <AnimatePresence>
-            {isEvolutionAnimating && evolutionTarget && evolvedPokemon && (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 z-[200] flex flex-col items-center justify-center overflow-hidden"
-              >
-                <EvolutionAnimation 
-                  from={evolutionTarget} 
-                  to={evolvedPokemon} 
-                  onComplete={() => {
-                    setIsEvolutionAnimating(false);
-                    setPendingRewardAction(null);
-                    setSelectedPokemonForEvolution(null);
-                    setEvolutionChoices([]);
-                    setEvolutionTarget(null);
-                    setEvolvedPokemon(null);
-                    finishReward();
-                  }}
-                  t={t}
-                  getLocalized={getLocalized}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {isEvolutionAnimating && evolutionTarget && evolvedPokemon && (
+            <motion.div 
+              key="evolution"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex-1 flex flex-col items-center justify-center overflow-hidden relative"
+            >
+              <EvolutionAnimation 
+                from={evolutionTarget} 
+                to={evolvedPokemon} 
+                onComplete={() => {
+                  setIsEvolutionAnimating(false);
+                  setPendingRewardAction(null);
+                  setSelectedPokemonForEvolution(null);
+                  setEvolutionChoices([]);
+                  setEvolutionTarget(null);
+                  setEvolvedPokemon(null);
+                  finishReward();
+                }}
+                t={t}
+                getLocalized={getLocalized}
+              />
+            </motion.div>
+          )}
 
           {gameState === 'GAMEOVER' && (
             <motion.div 

@@ -3,6 +3,8 @@ export interface Pokemon {
   name: string;
   names?: { name: string; language: { name: string } }[];
   zhName?: string; // Keep for backward compatibility
+  genderRate?: number;
+  captureRate?: number;
   sprites: {
     front_default: string;
     back_default: string;
@@ -99,6 +101,7 @@ export interface GamePokemon extends Pokemon {
   statStages: StatStages;
   volatileStatus?: string[];
   heldItem?: Item;
+  gender?: 'male' | 'female' | 'genderless';
 }
 
 export interface Item {
@@ -110,14 +113,15 @@ export interface Item {
   effect: (pokemon: GamePokemon) => GamePokemon;
   isBattleItem?: boolean;
   isBall?: boolean;
-  catchRate?: number;
+  ballModifier?: number;
+  sprite?: string;
 }
 
 export type Weather = 'none' | 'sunny' | 'rainy' | 'sandstorm' | 'snow' | 'heavy_rain' | 'harsh_sunlight' | 'strong_winds';
 export type Terrain = 'none' | 'electric' | 'grassy' | 'psychic' | 'misty';
 export type Dimension = 'none' | 'trick_room' | 'magic_room' | 'wonder_room';
 
-export type GameState = 'START' | 'MENU' | 'BATTLE' | 'REWARD' | 'LEARN_MOVE' | 'POKEMON_INFO' | 'GAMEOVER' | 'STARTER_SELECT' | 'EVOLUTION';
+export type GameState = 'START' | 'MENU' | 'BATTLE' | 'REWARD' | 'LEARN_MOVE' | 'POKEMON_INFO' | 'BAG' | 'GAMEOVER' | 'STARTER_SELECT' | 'EVOLUTION';
 export type BattleMenuTab = 'MAIN' | 'MOVES' | 'POKEMON' | 'BAG';
 
 export interface LanguageConfig {

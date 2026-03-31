@@ -46,7 +46,16 @@ export const EvolutionAnimation: React.FC<EvolutionAnimationProps> = ({ from, to
   }, [phase]);
 
   return (
-    <div className="relative w-full h-full flex flex-col items-center justify-center bg-white">
+    <div className="relative w-full h-full flex flex-col items-center justify-center bg-slate-50 overflow-hidden">
+      {/* Background Stripes */}
+      <div className="absolute inset-0 opacity-[0.05] pointer-events-none overflow-hidden">
+        <div className="absolute inset-0 rotate-12 scale-150 flex flex-col gap-4">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <div key={i} className="h-12 bg-slate-900 w-full" />
+          ))}
+        </div>
+      </div>
+
       {phase === 'FLASH' && (
         <motion.div 
           initial={{ opacity: 0 }}
@@ -56,7 +65,7 @@ export const EvolutionAnimation: React.FC<EvolutionAnimationProps> = ({ from, to
         />
       )}
 
-      <div className="relative w-64 h-64 mb-8">
+      <div className="relative w-64 h-64 mb-8 z-10">
         <AnimatePresence mode="wait">
           {phase === 'RESULT' ? (
             <motion.div
@@ -68,8 +77,8 @@ export const EvolutionAnimation: React.FC<EvolutionAnimationProps> = ({ from, to
             >
               <img 
                 src={to.sprites.front_default} 
-                alt={getLocalized(to.names)}
-                className="w-full h-full object-contain pixelated"
+                alt={getLocalized(to)}
+                className="w-full h-full object-contain drop-shadow-2xl"
                 referrerPolicy="no-referrer"
               />
             </motion.div>
@@ -84,7 +93,7 @@ export const EvolutionAnimation: React.FC<EvolutionAnimationProps> = ({ from, to
               <img 
                 src={showTo ? to.sprites.front_default : from.sprites.front_default} 
                 alt="evolving"
-                className={`w-full h-full object-contain pixelated ${phase === 'FLICKER' ? 'brightness-150' : ''}`}
+                className={`w-full h-full object-contain ${phase === 'FLICKER' ? 'brightness-150 grayscale contrast-200' : ''}`}
                 referrerPolicy="no-referrer"
               />
             </motion.div>
@@ -96,22 +105,24 @@ export const EvolutionAnimation: React.FC<EvolutionAnimationProps> = ({ from, to
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="text-center px-4"
+          className="text-center px-4 z-10"
         >
-          <h2 className="text-3xl font-bold text-blue-600 mb-4">
-            {t('evolveSuccessMsg', { from: getLocalized(from.names), to: getLocalized(to.names) })}
-          </h2>
+          <div className="bg-blue-600 px-8 py-3 skew-x-[-12deg] shadow-2xl mb-6">
+            <h2 className="text-2xl md:text-3xl font-black italic tracking-tighter skew-x-[12deg] text-white uppercase">
+              {t('evolveSuccessMsg', { from: getLocalized(from), target: getLocalized(to) })}
+            </h2>
+          </div>
           <button
             onClick={onComplete}
-            className="px-8 py-3 bg-blue-500 text-white rounded-full font-bold shadow-lg hover:bg-blue-600 transition-colors"
+            className="px-12 py-4 bg-slate-900 text-white font-black italic text-xl skew-x-[-12deg] hover:bg-blue-600 transition-all shadow-xl"
           >
-            {t('confirm')}
+            <span className="skew-x-[12deg] inline-block uppercase">{t('confirm')}</span>
           </button>
         </motion.div>
       )}
       
       {phase !== 'RESULT' && (
-        <div className="text-gray-400 font-mono animate-pulse">
+        <div className="text-slate-900 font-black italic text-2xl animate-pulse z-10 tracking-widest">
           EVOLVING...
         </div>
       )}
