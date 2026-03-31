@@ -183,20 +183,29 @@ function calculateStat(base: number, iv: number, level: number, isHp: boolean = 
   return Math.floor((Math.floor((base * 2 + iv) * level / 100) + 5) * natureMod);
 }
 
-export async function getProcessedPokemon(id: number, level: number = 50): Promise<GamePokemon> {
+export async function getProcessedPokemon(
+  id: number, 
+  level: number = 50, 
+  existingMoves?: Move[], 
+  existingIvs?: Stats, 
+  existingNature?: Nature
+): Promise<GamePokemon> {
   const raw = await fetchPokemon(id);
   
-  // Pick random moves that have power
-  const validMoves: Move[] = [];
-  const shuffledMoves = raw.moves.sort(() => 0.5 - Math.random());
-  
-  for (const m of shuffledMoves) {
-    try {
-      const move = await fetchMove(m.move.url);
-      validMoves.push(move);
-      if (validMoves.length >= 4) break;
-    } catch (e) {
-      continue;
+  // Pick moves: use existing ones if provided, otherwise pick random ones
+  let validMoves: Move[] = [];
+  if (existingMoves && existingMoves.length > 0) {
+    validMoves = [...existingMoves];
+  } else {
+    const shuffledMoves = raw.moves.sort(() => 0.5 - Math.random());
+    for (const m of shuffledMoves) {
+      try {
+        const move = await fetchMove(m.move.url);
+        validMoves.push(move);
+        if (validMoves.length >= 4) break;
+      } catch (e) {
+        continue;
+      }
     }
   }
   
@@ -216,8 +225,8 @@ export async function getProcessedPokemon(id: number, level: number = 50): Promi
     });
   }
 
-  // Generate IVs
-  const ivs: Stats = {
+  // Generate IVs: use existing ones if provided, otherwise generate new ones
+  const ivs: Stats = existingIvs || {
     hp: Math.floor(Math.random() * 32),
     attack: Math.floor(Math.random() * 32),
     defense: Math.floor(Math.random() * 32),
@@ -226,8 +235,8 @@ export async function getProcessedPokemon(id: number, level: number = 50): Promi
     speed: Math.floor(Math.random() * 32),
   };
 
-  // Pick Nature
-  const nature = NATURES[Math.floor(Math.random() * NATURES.length)];
+  // Pick Nature: use existing one if provided, otherwise pick a random one
+  const nature = existingNature || NATURES[Math.floor(Math.random() * NATURES.length)];
 
   // Base Stats
   const baseStats: Stats = {

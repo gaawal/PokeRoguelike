@@ -395,7 +395,12 @@ const EvolutionAnimation = ({ from, to, onComplete, t, getLocalized }: {
   }, [phase]);
 
   return (
-    <div className="relative w-full h-full flex flex-col items-center justify-center bg-white">
+    <div className="relative w-full h-full flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm overflow-hidden">
+      {/* 剑盾风格背景装饰 */}
+      <div className="absolute inset-0 pointer-events-none opacity-5">
+        <div className="absolute top-0 left-0 w-full h-full bg-[linear-gradient(45deg,#00a0e9_25%,transparent_25%,transparent_50%,#00a0e9_50%,#00a0e9_75%,transparent_75%,transparent)] bg-[length:100px_100px] animate-barber-pole"></div>
+      </div>
+
       {phase === 'FLASH' && (
         <motion.div 
           initial={{ opacity: 0 }}
@@ -405,7 +410,7 @@ const EvolutionAnimation = ({ from, to, onComplete, t, getLocalized }: {
         />
       )}
 
-      <div className="relative w-64 h-64 mb-8">
+      <div className="relative w-48 h-48 md:w-64 md:h-64 mb-8">
         <AnimatePresence mode="wait">
           {phase === 'RESULT' ? (
             <motion.div
@@ -417,8 +422,8 @@ const EvolutionAnimation = ({ from, to, onComplete, t, getLocalized }: {
             >
               <img 
                 src={to.sprites.front_default} 
-                alt={getLocalized(to.names)}
-                className="w-full h-full object-contain pixelated"
+                alt={getLocalized(to)}
+                className="w-full h-full object-contain pixelated drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]"
                 referrerPolicy="no-referrer"
               />
             </motion.div>
@@ -445,23 +450,25 @@ const EvolutionAnimation = ({ from, to, onComplete, t, getLocalized }: {
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="text-center px-4"
+          className="text-center px-4 z-10"
         >
-          <h2 className="text-3xl font-bold text-blue-600 mb-4">
-            {t('evolveSuccessMsg', { from: getLocalized(from.names), to: getLocalized(to.names) })}
-          </h2>
+          <div className="bg-slate-900 px-8 py-3 skew-x-[-12deg] shadow-2xl mb-6 border-l-4 border-blue-500">
+            <h2 className="text-xl md:text-3xl font-black italic tracking-tighter skew-x-[12deg] text-white uppercase">
+              {t('evolveSuccessMsg', { name: getLocalized(from), target: getLocalized(to) })}
+            </h2>
+          </div>
           <button
             onClick={onComplete}
-            className="px-8 py-3 bg-blue-500 text-white rounded-full font-bold shadow-lg hover:bg-blue-600 transition-colors"
+            className="px-12 py-4 bg-blue-600 text-white font-black italic text-lg md:text-xl skew-x-[-12deg] hover:bg-blue-700 transition-all shadow-xl"
           >
-            {t('confirm')}
+            <span className="skew-x-[12deg] inline-block">{t('confirm')}</span>
           </button>
         </motion.div>
       )}
       
       {phase !== 'RESULT' && (
-        <div className="text-gray-400 font-mono animate-pulse">
-          EVOLVING...
+        <div className="bg-slate-900 text-white px-6 py-2 skew-x-[-10deg] animate-pulse">
+          <span className="skew-x-[10deg] inline-block font-black italic tracking-widest">EVOLVING...</span>
         </div>
       )}
     </div>
@@ -488,7 +495,7 @@ export default function App() {
   const [selectedGens, setSelectedGens] = useState<number[]>([1]);
   const [startLevel, setStartLevel] = useState<number>(50);
   const [starterOptions, setStarterOptions] = useState<GamePokemon[]>([]);
-  const [selectedStarterIdx, setSelectedStarterIdx] = useState<number | null>(null);
+  const [selectedStarterIndices, setSelectedStarterIndices] = useState<number[]>([]);
   const [hoveredMove, setHoveredMove] = useState<Move | null>(null);
   const [infoPokemonIdx, setInfoPokemonIdx] = useState<number | null>(null);
   const [prevGameState, setPrevGameState] = useState<GameState>('START');
@@ -577,7 +584,9 @@ export default function App() {
       searchingPokemon: '正在寻找宝可梦...',
       battleHistory: '对战历史',
       chooseStarter: '选择你的初始伙伴',
-      chooseStarterDesc: '从这三只随机宝可梦中选择一只开始你的冒险',
+      chooseStarterDesc: '请选择2只宝可梦作为你的初始伙伴。点击卡片进行选择，再次点击取消。',
+      selectTwoStarters: '请选择2只宝可梦',
+      confirmSelection: '确认选择并开始冒险',
       startingMoves: '初始技能',
       viewDetails: '查看详情',
       iChooseYou: '就决定是你了！',
@@ -735,7 +744,9 @@ export default function App() {
       searchingPokemon: '正在尋找寶可夢...',
       battleHistory: '對戰歷史',
       chooseStarter: '選擇你的初始夥伴',
-      chooseStarterDesc: '從這三隻隨機寶可夢中選擇一隻開始你的冒險',
+      chooseStarterDesc: '請選擇2隻寶可夢作為你的初始夥伴。點擊卡片進行選擇，再次點擊取消。',
+      selectTwoStarters: '請選擇2隻寶可夢',
+      confirmSelection: '確認選擇並開始冒險',
       startingMoves: '初始技能',
       viewDetails: '查看詳情',
       iChooseYou: '就決定是你了！',
@@ -893,7 +904,9 @@ export default function App() {
       searchingPokemon: 'Searching for Pokemon...',
       battleHistory: 'Battle History',
       chooseStarter: 'Choose Your Starter',
-      chooseStarterDesc: 'Choose one of these three random Pokemon to start your adventure',
+      chooseStarterDesc: 'Please select 2 Pokemon as your initial partners. Click a card to select, click again to deselect.',
+      selectTwoStarters: 'Please select 2 Pokemon',
+      confirmSelection: 'Confirm & Start Adventure',
       startingMoves: 'Starting Moves',
       viewDetails: 'View Details',
       iChooseYou: 'I choose you!',
@@ -999,7 +1012,7 @@ export default function App() {
     let str = uiStrings[lang]?.[key] || uiStrings['en']?.[key] || key;
     if (params) {
       Object.entries(params).forEach(([k, v]) => {
-        str = str.replace(`{${k}}`, String(v));
+        str = str.split(`{${k}}`).join(String(v));
       });
     }
     return str;
@@ -1086,13 +1099,14 @@ export default function App() {
   const startGame = async () => {
     setLoading(true);
     try {
-      // 生成3个随机宝可梦供选择
+      // 生成4个随机宝可梦供选择
       const starterIds = [];
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 4; i++) {
         starterIds.push(await getRandomPokemonId(selectedGens));
       }
       const starters = await Promise.all(starterIds.map(id => getProcessedPokemon(id, startLevel)));
       setStarterOptions(starters);
+      setSelectedStarterIndices([]);
       
       // 初始道具：1个回复药，5个精灵球
       const initialInventory: Item[] = [];
@@ -1114,14 +1128,30 @@ export default function App() {
     }
   };
 
-  const selectStarter = async (index: number) => {
-    const starter = starterOptions[index];
-    setPlayerTeam([starter]);
+  const toggleStarterSelection = (index: number) => {
+    setSelectedStarterIndices(prev => {
+      if (prev.includes(index)) {
+        return prev.filter(i => i !== index);
+      }
+      if (prev.length < 2) {
+        return [...prev, index];
+      }
+      return prev;
+    });
+  };
+
+  const confirmStarters = async () => {
+    if (selectedStarterIndices.length !== 2) return;
+    
+    const starters = selectedStarterIndices.map(idx => starterOptions[idx]);
+    setPlayerTeam(starters);
     startBattleTransition();
+    
+    // Initialize the first battle
     const enemyPoke = await spawnEnemy(1);
     if (enemyPoke) {
-      await triggerAbility(starter, enemyPoke, true);
-      await triggerAbility(enemyPoke, starter, false);
+      await triggerAbility(starters[0], enemyPoke, true);
+      await triggerAbility(enemyPoke, starters[0], false);
     }
   };
 
@@ -2222,7 +2252,13 @@ export default function App() {
     const { pokemon, index } = selectedPokemonForEvolution;
     setLoading(true);
     try {
-      const evolved = await getProcessedPokemon(evolvedId, pokemon.level);
+      const evolved = await getProcessedPokemon(
+        evolvedId, 
+        pokemon.level, 
+        pokemon.selectedMoves, 
+        undefined, // Individual values should be recalculated (randomized) for the new species
+        pokemon.nature
+      );
       
       // Keep current HP percentage
       const hpPercent = pokemon.currentHp / pokemon.maxHp;
@@ -2428,73 +2464,99 @@ export default function App() {
               key="starter-select"
               initial={{ opacity: 0, y: 50 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex-1 flex flex-col py-4 overflow-hidden"
+              className="flex-1 flex flex-col py-4 overflow-hidden h-full"
             >
-              <div className="text-center mb-4 md:mb-8 flex-none px-4">
+              <div className="text-center mb-4 flex-none px-4">
                 <div className="inline-block bg-slate-900 px-6 md:px-12 py-2 md:py-3 skew-x-[-12deg] shadow-xl mb-2 md:mb-4">
-                  <h2 className="text-2xl md:text-4xl font-black italic tracking-tighter skew-x-[12deg] text-white uppercase">{t('chooseStarter')}</h2>
+                  <h2 className="text-xl md:text-3xl font-black italic tracking-tighter skew-x-[12deg] text-white uppercase">{t('chooseStarter')}</h2>
                 </div>
-                <p className="text-slate-500 font-bold italic text-xs md:text-sm">{t('chooseStarterDesc')}</p>
+                <div className="flex justify-center gap-2 mb-2">
+                  {[0, 1].map(i => (
+                    <div key={i} className={`w-3 h-3 rounded-full border-2 ${selectedStarterIndices.length > i ? 'bg-blue-500 border-blue-500' : 'bg-transparent border-slate-300'}`} />
+                  ))}
+                  <span className="text-xs font-black italic text-slate-400 ml-2 uppercase">
+                    {selectedStarterIndices.length}/2 {t('selectTwoStarters')}
+                  </span>
+                </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-8">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8 max-w-5xl mx-auto w-full">
-                  {starterOptions.map((p, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-white p-4 md:p-8 shadow-xl hover:shadow-blue-200 transition-all border-b-4 md:border-b-8 border-slate-100 hover:border-blue-500 group flex flex-col items-center relative"
-                    >
-                      <div className="absolute top-2 right-2 md:top-4 md:right-4 bg-slate-100 px-2 py-1 text-[8px] md:text-[10px] font-black italic">
-                        Lv.{p.level}
-                      </div>
-                      <div className="relative mb-4 md:mb-6 group-hover:scale-110 transition-transform duration-500">
-                        <div className="absolute inset-0 bg-blue-50 rounded-full scale-110 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                        <img 
-                          src={p.sprites.front_default} 
-                          alt={getLocalized(p)} 
-                          className="w-32 h-32 md:w-40 md:h-40 object-contain relative z-10 drop-shadow-xl"
-                          referrerPolicy="no-referrer"
-                        />
-                      </div>
-                      <h3 className="text-2xl md:text-3xl font-black italic mb-1 md:mb-2 uppercase tracking-tighter truncate w-full text-center">{getLocalized(p)}</h3>
-                      <div className="flex gap-1 mb-4 md:mb-6">
-                        {p.types.map((t: any) => (
-                          <TypeBadge key={t.type.name} type={t.type.name} size="xs" className="skew-x-[-10deg]" />
-                        ))}
-                      </div>
-
-                      <div className="w-full space-y-1 md:space-y-2 mb-6 md:mb-8">
-                        <div className="text-[8px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 md:mb-2">{t('startingMoves')}</div>
-                        {p.selectedMoves.map((m, mi) => (
-                          <div key={mi} className="flex justify-between items-center bg-slate-50 p-1.5 md:p-2 text-[10px] md:text-xs font-bold italic border-l-4 border-slate-200">
-                            <span className="truncate pr-2">{getLocalized(m)}</span>
-                            <TypeBadge type={m.type} size="xs" />
+              <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-24">
+                <div className="grid grid-cols-2 gap-3 md:gap-6 max-w-4xl mx-auto w-full">
+                  {starterOptions.map((p, idx) => {
+                    const isSelected = selectedStarterIndices.includes(idx);
+                    return (
+                      <motion.div
+                        key={idx}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => toggleStarterSelection(idx)}
+                        className={`bg-white p-3 md:p-6 shadow-lg transition-all border-4 cursor-pointer flex flex-col items-center relative ${isSelected ? 'border-blue-500 ring-4 ring-blue-100' : 'border-slate-100 hover:border-slate-300'}`}
+                      >
+                        {isSelected && (
+                          <div className="absolute -top-3 -right-3 bg-blue-500 text-white p-1 rounded-full shadow-lg z-20">
+                            <Sparkles className="w-4 h-4" />
                           </div>
-                        ))}
-                      </div>
+                        )}
+                        <div className="absolute top-1 right-1 md:top-2 md:right-2 bg-slate-100 px-1.5 py-0.5 text-[8px] md:text-[10px] font-black italic">
+                          Lv.{p.level}
+                        </div>
+                        <div className="relative mb-2 md:mb-4">
+                          <div className={`absolute inset-0 bg-blue-50 rounded-full scale-110 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`}></div>
+                          <img 
+                            src={p.sprites.front_default} 
+                            alt={getLocalized(p)} 
+                            className="w-20 h-20 md:w-32 md:h-32 object-contain relative z-10 drop-shadow-lg"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                        <h3 className="text-sm md:text-xl font-black italic mb-1 uppercase tracking-tighter truncate w-full text-center">{getLocalized(p)}</h3>
+                        <div className="flex gap-1 mb-2">
+                          {p.types.map((t: any) => (
+                            <TypeBadge key={t.type.name} type={t.type.name} size="xs" className="skew-x-[-10deg]" />
+                          ))}
+                        </div>
 
-                      <div className="flex gap-2 w-full mt-auto">
+                        <div className="w-full space-y-1 mb-2 hidden md:block">
+                          <div className="text-[8px] font-black uppercase text-slate-400 tracking-widest">{t('startingMoves')}</div>
+                          {p.selectedMoves.slice(0, 2).map((m, mi) => (
+                            <div key={mi} className="flex justify-between items-center bg-slate-50 p-1 text-[8px] font-bold italic border-l-2 border-slate-200">
+                              <span className="truncate pr-1">{getLocalized(m)}</span>
+                              <TypeBadge type={m.type} size="xs" />
+                            </div>
+                          ))}
+                        </div>
+                        
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setInfoPokemonIdx(idx);
                             setPrevGameState('STARTER_SELECT');
                             setGameState('POKEMON_INFO');
                           }}
-                          className="flex-1 py-2 md:py-3 bg-slate-100 text-slate-600 font-black italic hover:bg-slate-200 transition-all text-[10px] md:text-sm"
+                          className="mt-auto w-full py-1 bg-slate-100 text-slate-500 font-black italic hover:bg-slate-200 transition-all text-[8px] md:text-[10px] uppercase"
                         >
                           {t('viewDetails')}
                         </button>
-                        <button
-                          onClick={() => selectStarter(idx)}
-                          className="flex-[2] py-2 md:py-3 bg-slate-900 text-white font-black italic hover:bg-blue-600 transition-all text-[10px] md:text-sm shadow-lg"
-                        >
-                          {t('iChooseYou')}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                      </motion.div>
+                    );
+                  })}
                 </div>
               </div>
+
+              {selectedStarterIndices.length === 2 && (
+                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-50">
+                  <motion.button
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    onClick={confirmStarters}
+                    className="px-12 py-4 bg-blue-600 text-white font-black italic text-lg md:text-xl skew-x-[-12deg] shadow-[8px_8px_0px_#1e3a8a] hover:bg-blue-700 hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
+                  >
+                    <span className="flex items-center gap-3 skew-x-[12deg]">
+                      {t('confirmSelection')} <ChevronRight className="w-6 h-6" />
+                    </span>
+                  </motion.button>
+                </div>
+              )}
             </motion.div>
           )}
         {/* 对战历史悬浮窗 */}
@@ -3851,7 +3913,7 @@ export default function App() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[200] bg-white flex flex-col items-center justify-center overflow-hidden"
+                className="absolute inset-0 z-[200] flex flex-col items-center justify-center overflow-hidden"
               >
                 <EvolutionAnimation 
                   from={evolutionTarget} 

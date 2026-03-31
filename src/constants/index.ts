@@ -1,0 +1,357 @@
+import { Move, Item, Stats, StatStages, Nature } from '../types/index';
+import { 
+  Circle, 
+  Flame, 
+  Droplets, 
+  Leaf, 
+  Zap, 
+  Snowflake, 
+  Swords, 
+  Skull, 
+  Mountain, 
+  Wind, 
+  Eye, 
+  Bug, 
+  Gem, 
+  Ghost, 
+  Dna, 
+  Shield, 
+  Heart, 
+  Moon,
+  Sparkles
+} from 'lucide-react';
+
+export const TYPE_COLORS: Record<string, string> = {
+  normal: '#A8A77A',
+  fire: '#EE8130',
+  water: '#6390F0',
+  electric: '#F7D02C',
+  grass: '#7AC74C',
+  ice: '#96D9D6',
+  fighting: '#C22E28',
+  poison: '#A33EA1',
+  ground: '#E2BF65',
+  flying: '#A98FF3',
+  psychic: '#F95587',
+  bug: '#A6B91A',
+  rock: '#B6A136',
+  ghost: '#735797',
+  dragon: '#6F35FC',
+  dark: '#705746',
+  steel: '#B7B7CE',
+  fairy: '#D685AD',
+};
+
+export const TYPE_ICONS: Record<string, any> = {
+  normal: Circle,
+  fire: Flame,
+  water: Droplets,
+  grass: Leaf,
+  electric: Zap,
+  ice: Snowflake,
+  fighting: Swords,
+  poison: Skull,
+  ground: Mountain,
+  flying: Wind,
+  psychic: Eye,
+  bug: Bug,
+  rock: Gem,
+  ghost: Ghost,
+  dragon: Dna,
+  steel: Shield,
+  fairy: Heart,
+  dark: Moon,
+};
+
+export const AILMENT_ZH: Record<string, string> = {
+  poison: '中毒',
+  toxic: '剧毒',
+  paralysis: '麻痹',
+  burn: '灼伤',
+  freeze: '冰冻',
+  sleep: '睡眠',
+  confusion: '混乱',
+  infatuation: '着迷',
+  trap: '束缚',
+  nightmare: '噩梦',
+  leech_seed: '寄生种子',
+};
+
+export const STAT_ZH: Record<string, string> = {
+  attack: '攻击',
+  defense: '防御',
+  spAtk: '特攻',
+  spDef: '特防',
+  speed: '速度',
+  accuracy: '命中',
+  evasion: '闪避',
+};
+
+export const STAT_STAGE_MODIFIERS: Record<number, number> = {
+  '-6': 2 / 8,
+  '-5': 2 / 7,
+  '-4': 2 / 6,
+  '-3': 2 / 5,
+  '-2': 2 / 4,
+  '-1': 2 / 3,
+  '0': 1,
+  '1': 1.5,
+  '2': 2,
+  '3': 2.5,
+  '4': 3,
+  '5': 3.5,
+  '6': 4,
+};
+
+export const ACC_EVA_STAGE_MODIFIERS: Record<number, number> = {
+  '-6': 3 / 9,
+  '-5': 3 / 8,
+  '-4': 3 / 7,
+  '-3': 3 / 6,
+  '-2': 3 / 5,
+  '-1': 3 / 4,
+  '0': 1,
+  '1': 4 / 3,
+  '2': 5 / 3,
+  '3': 6 / 3,
+  '4': 7 / 3,
+  '5': 8 / 3,
+  '6': 9 / 3,
+};
+
+export const STRUGGLE_MOVE: Move = {
+  id: 'struggle',
+  name: 'struggle',
+  type: 'normal',
+  power: 50,
+  accuracy: null,
+  damage_class: 'physical',
+  pp: 1,
+  currentPP: 1,
+  maxPP: 1,
+  priority: 0,
+  drain: -25,
+  statChanges: null,
+  ailment: null,
+  ailmentChance: 0,
+  target: 'selected-pokemon'
+};
+
+export const ITEMS: Item[] = [
+  {
+    id: 'potion',
+    name: 'Potion',
+    zhName: '回复药',
+    description: 'Heal 50 HP',
+    zhDescription: '恢复50点HP',
+    price: 100,
+    effect: (p) => ({ ...p, currentHp: Math.min(p.maxHp, p.currentHp + 50) })
+  },
+  {
+    id: 'pokeball',
+    name: 'Poke Ball',
+    zhName: '精灵球',
+    description: 'Used to catch wild Pokemon',
+    zhDescription: '用于捕捉野生宝可梦',
+    price: 200,
+    isBall: true,
+    catchRate: 1.0,
+    effect: (p) => p
+  },
+  {
+    id: 'greatball',
+    name: 'Great Ball',
+    zhName: '超级球',
+    description: 'Higher catch rate than Poke Ball',
+    zhDescription: '比精灵球更容易捕捉',
+    price: 600,
+    isBall: true,
+    catchRate: 1.5,
+    effect: (p) => p
+  },
+  {
+    id: 'ultraball',
+    name: 'Ultra Ball',
+    zhName: '高级球',
+    description: 'Very high catch rate',
+    zhDescription: '捕捉概率非常高',
+    price: 1200,
+    isBall: true,
+    catchRate: 2.0,
+    effect: (p) => p
+  },
+  {
+    id: 'masterball',
+    name: 'Master Ball',
+    zhName: '大师球',
+    description: 'The ultimate ball that never fails',
+    zhDescription: '绝对能捕捉到宝可梦的终极球',
+    price: 5000,
+    isBall: true,
+    catchRate: 255,
+    effect: (p) => p
+  },
+  {
+    id: 'leftovers',
+    name: 'Leftovers',
+    zhName: '吃剩的东西',
+    description: 'Heal a little HP each turn',
+    zhDescription: '每回合恢复一点HP',
+    price: 2000,
+    isBattleItem: true,
+    effect: (p) => ({ ...p, heldItem: ITEMS.find(i => i.id === 'leftovers') })
+  },
+  {
+    id: 'focus_sash',
+    name: 'Focus Sash',
+    zhName: '气势披带',
+    description: 'Survive one hit at full HP',
+    zhDescription: '满HP时受到致命伤会保留1点HP',
+    price: 3000,
+    isBattleItem: true,
+    effect: (p) => ({ ...p, heldItem: ITEMS.find(i => i.id === 'focus_sash') })
+  },
+  {
+    id: 'protein',
+    name: 'Protein',
+    zhName: '攻击增强',
+    description: 'Increase Attack by 10%',
+    zhDescription: '攻击力提升10%',
+    price: 500,
+    effect: (p) => ({ ...p, calculatedStats: { ...p.calculatedStats, attack: Math.floor(p.calculatedStats.attack * 1.1) } })
+  },
+  {
+    id: 'iron',
+    name: 'Iron',
+    zhName: '防御增强',
+    description: 'Increase Defense by 10%',
+    zhDescription: '防御力提升10%',
+    price: 500,
+    effect: (p) => ({ ...p, calculatedStats: { ...p.calculatedStats, defense: Math.floor(p.calculatedStats.defense * 1.1) } })
+  },
+  {
+    id: 'calcium',
+    name: 'Calcium',
+    zhName: '特攻增强',
+    description: 'Increase Sp. Atk by 10%',
+    zhDescription: '特攻提升10%',
+    price: 500,
+    effect: (p) => ({ ...p, calculatedStats: { ...p.calculatedStats, spAtk: Math.floor(p.calculatedStats.spAtk * 1.1) } })
+  },
+  {
+    id: 'zinc_item',
+    name: 'Zinc',
+    zhName: '特防增强',
+    description: 'Increase Sp. Def by 10%',
+    zhDescription: '特防提升10%',
+    price: 500,
+    effect: (p) => ({ ...p, calculatedStats: { ...p.calculatedStats, spDef: Math.floor(p.calculatedStats.spDef * 1.1) } })
+  },
+  {
+    id: 'carbos',
+    name: 'Carbos',
+    zhName: '速度增强',
+    description: 'Increase Speed by 10%',
+    zhDescription: '速度提升10%',
+    price: 500,
+    effect: (p) => ({ ...p, calculatedStats: { ...p.calculatedStats, speed: Math.floor(p.calculatedStats.speed * 1.1) } })
+  },
+  {
+    id: 'battle_atk',
+    name: 'X Attack',
+    zhName: '力量强化',
+    description: 'Increase Attack in battle',
+    zhDescription: '战斗中提升攻击力',
+    effect: (p) => p
+  },
+  {
+    id: 'battle_def',
+    name: 'X Defense',
+    zhName: '防御强化',
+    description: 'Increase Defense in battle',
+    zhDescription: '战斗中提升防御力',
+    effect: (p) => p
+  }
+];
+
+export const TYPE_CHART: Record<string, Record<string, number>> = {
+  normal: { rock: 0.5, ghost: 0, steel: 0.5 },
+  fire: { fire: 0.5, water: 0.5, grass: 2, ice: 2, bug: 2, rock: 0.5, dragon: 0.5, steel: 2 },
+  water: { fire: 2, water: 0.5, grass: 0.5, ground: 2, rock: 2, dragon: 0.5 },
+  electric: { water: 2, electric: 0.5, grass: 0.5, ground: 0, flying: 2, dragon: 0.5 },
+  grass: { fire: 0.5, water: 2, grass: 0.5, poison: 0.5, ground: 2, flying: 0.5, bug: 0.5, rock: 2, dragon: 0.5, steel: 0.5 },
+  ice: { fire: 0.5, water: 0.5, grass: 2, ice: 0.5, ground: 2, flying: 2, dragon: 2, steel: 0.5 },
+  fighting: { normal: 2, ice: 2, poison: 0.5, flying: 0.5, psychic: 0.5, bug: 0.5, rock: 2, ghost: 0, dark: 2, steel: 2, fairy: 0.5 },
+  poison: { grass: 2, poison: 0.5, ground: 0.5, rock: 0.5, ghost: 0.5, steel: 0, fairy: 2 },
+  ground: { fire: 2, electric: 2, grass: 0.5, poison: 2, flying: 0, bug: 0.5, rock: 2, steel: 2 },
+  flying: { electric: 0.5, grass: 2, fighting: 2, bug: 2, rock: 0.5, steel: 0.5 },
+  psychic: { fighting: 2, poison: 2, psychic: 0.5, dark: 0, steel: 0.5 },
+  bug: { fire: 0.5, grass: 2, fighting: 0.5, poison: 0.5, flying: 0.5, psychic: 2, ghost: 0.5, dark: 2, steel: 0.5, fairy: 0.5 },
+  rock: { fire: 2, ice: 2, fighting: 0.5, ground: 0.5, flying: 2, bug: 2, steel: 0.5 },
+  ghost: { normal: 0, psychic: 2, ghost: 2, dark: 0.5 },
+  dragon: { dragon: 2, steel: 0.5, fairy: 0 },
+  dark: { fighting: 0.5, psychic: 2, ghost: 2, dark: 0.5, fairy: 0.5 },
+  steel: { fire: 0.5, water: 0.5, electric: 0.5, ice: 2, rock: 2, steel: 0.5, fairy: 2 },
+  fairy: { fire: 0.5, fighting: 2, poison: 0.5, dragon: 2, dark: 2, steel: 0.5 },
+};
+
+export const TYPE_ZH: Record<string, string> = {
+  normal: '一般',
+  fire: '火',
+  water: '水',
+  electric: '电',
+  grass: '草',
+  ice: '冰',
+  fighting: '格斗',
+  poison: '毒',
+  ground: '地面',
+  flying: '飞行',
+  psychic: '超能力',
+  bug: '虫',
+  rock: '岩石',
+  ghost: '幽灵',
+  dragon: '龙',
+  dark: '恶',
+  steel: '钢',
+  fairy: '妖精',
+};
+
+export const GENERATIONS = [
+  { id: 1, name: '第一世代', region: '关都', range: [1, 151] },
+  { id: 2, name: '第二世代', region: '城都', range: [152, 251] },
+  { id: 3, name: '第三世代', region: '丰缘', range: [252, 386] },
+  { id: 4, name: '第四世代', region: '神奥', range: [387, 493] },
+  { id: 5, name: '第五世代', region: '合众', range: [494, 649] },
+  { id: 6, name: '第六世代', region: '卡洛斯', range: [650, 721] },
+  { id: 7, name: '第七世代', region: '阿罗拉', range: [722, 809] },
+  { id: 8, name: '第八世代', region: '伽勒尔', range: [810, 898] },
+  { id: 9, name: '第九世代', region: '帕底亚', range: [899, 1025] },
+];
+
+export const NATURES: Nature[] = [
+  { name: 'adamant', zhName: '固执', plus: 'attack', minus: 'spAtk' },
+  { name: 'bashful', zhName: '害羞', plus: '', minus: '' },
+  { name: 'bold', zhName: '大胆', plus: 'defense', minus: 'attack' },
+  { name: 'brave', zhName: '勇敢', plus: 'attack', minus: 'speed' },
+  { name: 'calm', zhName: '温和', plus: 'spDef', minus: 'attack' },
+  { name: 'careful', zhName: '慎重', plus: 'spDef', minus: 'spAtk' },
+  { name: 'docile', zhName: '坦率', plus: '', minus: '' },
+  { name: 'gentle', zhName: '温顺', plus: 'spDef', minus: 'defense' },
+  { name: 'hardy', zhName: '勤奋', plus: '', minus: '' },
+  { name: 'hasty', zhName: '急躁', plus: 'speed', minus: 'defense' },
+  { name: 'impish', zhName: '淘气', plus: 'defense', minus: 'spAtk' },
+  { name: 'jolly', zhName: '爽朗', plus: 'speed', minus: 'spAtk' },
+  { name: 'lax', zhName: '乐天', plus: 'defense', minus: 'spDef' },
+  { name: 'lonely', zhName: '怕寂寞', plus: 'attack', minus: 'defense' },
+  { name: 'mild', zhName: '慢吞吞', plus: 'spAtk', minus: 'defense' },
+  { name: 'modest', zhName: '内敛', plus: 'spAtk', minus: 'attack' },
+  { name: 'naive', zhName: '天真', plus: 'speed', minus: 'spDef' },
+  { name: 'naughty', zhName: '顽皮', plus: 'attack', minus: 'spDef' },
+  { name: 'quiet', zhName: '冷静', plus: 'spAtk', minus: 'speed' },
+  { name: 'quirky', zhName: '离奇', plus: '', minus: '' },
+  { name: 'rash', zhName: '马虎', plus: 'spAtk', minus: 'spDef' },
+  { name: 'relaxed', zhName: '悠闲', plus: 'defense', minus: 'speed' },
+  { name: 'sassy', zhName: '自大', plus: 'spDef', minus: 'speed' },
+  { name: 'serious', zhName: '认真', plus: '', minus: '' },
+  { name: 'timid', zhName: '胆小', plus: 'speed', minus: 'attack' },
+];
