@@ -2256,7 +2256,7 @@ export default function App() {
         evolvedId, 
         pokemon.level, 
         pokemon.selectedMoves, 
-        undefined, // Individual values should be recalculated (randomized) for the new species
+        pokemon.ivs, // Inherit individual values (IVs) from the previous stage
         pokemon.nature
       );
       
@@ -3717,7 +3717,20 @@ export default function App() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-end mb-1">
-                              <div className="font-black italic text-lg uppercase truncate">{getLocalized(p)}</div>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="font-black italic text-lg uppercase truncate">{getLocalized(p)}</div>
+                                {(() => {
+                                  const vCount = Object.values(p.ivs).filter(v => v === 31).length;
+                                  if (vCount > 0) {
+                                    return (
+                                      <div className="bg-yellow-400 text-slate-900 text-[8px] px-1 font-black skew-x-[-10deg] flex-none">
+                                        <span className="skew-x-[10deg] inline-block">{vCount}V</span>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
                               <div className="text-xs font-black text-slate-400 italic">LV.{p.level}</div>
                             </div>
                             <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
@@ -3796,7 +3809,20 @@ export default function App() {
                             <div className="p-4 md:p-8 bg-white">
                               <div className="mb-6 md:mb-8">
                                 <div className="flex justify-between items-end mb-4 md:mb-6 border-b border-slate-100 pb-2">
-                                  <h3 className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400">{currentLanguage.startsWith('zh') ? '能力值' : 'Stats'}</h3>
+                                  <div className="flex items-center gap-3">
+                                    <h3 className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-400">{currentLanguage.startsWith('zh') ? '能力值' : 'Stats'}</h3>
+                                    {(() => {
+                                      const vCount = Object.values(displayPokemon.ivs).filter(v => v === 31).length;
+                                      if (vCount > 0) {
+                                        return (
+                                          <div className="bg-yellow-400 text-slate-900 text-[8px] md:text-[10px] px-1.5 py-0.5 font-black skew-x-[-10deg] shadow-sm">
+                                            <span className="skew-x-[10deg] inline-block">{vCount}V</span>
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
+                                  </div>
                                   <div className="text-[8px] md:text-[10px] font-bold text-blue-500 italic">
                                     {getLocalizedNature(displayPokemon.nature)} {currentLanguage.startsWith('zh') ? '性格' : 'Nature'} 
                                     ({displayPokemon.nature.plus ? `+${getStatName(displayPokemon.nature.plus)}` : ''}
@@ -3822,7 +3848,12 @@ export default function App() {
                                       <div key={i} className="flex flex-col gap-0.5 md:gap-1">
                                         <div className="flex justify-between items-center text-[8px] md:text-[10px] font-bold italic">
                                           <div className="text-slate-500">{statName}</div>
-                                          <div className="text-slate-300">{currentLanguage.startsWith('zh') ? '种族' : 'Base'}: {base} / {currentLanguage.startsWith('zh') ? '个体' : 'IV'}: {iv}</div>
+                                          <div className="text-slate-300">
+                                            {currentLanguage.startsWith('zh') ? '种族' : 'Base'}: {base} / 
+                                            <span className={iv === 31 ? "text-yellow-500 font-black" : ""}>
+                                              {currentLanguage.startsWith('zh') ? ' 个体' : ' IV'}: {iv}{iv === 31 ? ' (V)' : ''}
+                                            </span>
+                                          </div>
                                         </div>
                                         <div className="flex items-center gap-3 md:gap-4">
                                           <div className="flex-1 h-1.5 md:h-2 bg-slate-100 rounded-full overflow-hidden">
