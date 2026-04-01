@@ -1918,7 +1918,7 @@ export default function App() {
         setGameState('GAMEOVER');
       } else {
         setIsFaintedReplacement(true);
-        setBattleMenuTab('POKEMON');
+        setGameState('POKEMON_INFO');
       }
     } else {
       setTurn('PLAYER');
@@ -2124,11 +2124,12 @@ export default function App() {
     if (currentEnemy.currentHp <= 0) {
       winBattle();
     } else if (currentPlayer.currentHp <= 0) {
-      if (playerTeam.every(p => p.currentHp <= 0)) {
+      const isAllFainted = playerTeam.slice(1).every(p => p.currentHp <= 0);
+      if (isAllFainted) {
         setGameState('GAMEOVER');
       } else {
         setIsFaintedReplacement(true);
-        setBattleMenuTab('POKEMON');
+        setGameState('POKEMON_INFO');
       }
     } else {
       await decrementEnvironments();
@@ -2996,20 +2997,20 @@ export default function App() {
                 {/* 敌人 */}
                 <div className="absolute top-4 sm:top-8 right-4 sm:right-12 flex flex-col items-end">
                   <div className="bg-white p-2 sm:p-3 shadow-lg border-r-8 border-red-500 w-48 sm:w-72 skew-x-[-10deg] mb-2 sm:mb-4">
-                    <div className="skew-x-[10deg] flex flex-col gap-0.5 sm:gap-1">
-                      <div className="flex justify-between items-center flex-wrap gap-y-1">
-                        <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
-                          <span className="font-black text-sm sm:text-xl italic uppercase truncate max-w-[80px] sm:max-w-none">{getLocalized(enemy)}</span>
-                          {enemy.status && (
-                            <span className="bg-slate-900 text-white text-[6px] sm:text-[8px] px-1 py-0.5 font-black uppercase tracking-tighter">
-                              {AILMENT_ZH[enemy.status] || enemy.status}
-                            </span>
-                          )}
-                          <div className="flex gap-1">
-                            {enemy.types.map(t => (
-                              <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
-                            ))}
-                          </div>
+                    <div className="skew-x-[10deg] flex flex-col gap-1 sm:gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-sm sm:text-xl italic uppercase truncate max-w-[120px] sm:max-w-none">{getLocalized(enemy)}</span>
+                        {enemy.status && (
+                          <span className="bg-slate-900 text-white text-[6px] sm:text-[8px] px-1 py-0.5 font-black uppercase tracking-tighter">
+                            {AILMENT_ZH[enemy.status] || enemy.status}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <div className="flex gap-1">
+                          {enemy.types.map(t => (
+                            <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
+                          ))}
                         </div>
                         <span className="text-[8px] sm:text-xs font-bold bg-slate-900 text-white px-1.5 sm:px-2 py-0.5">Lv.{enemy.level}</span>
                       </div>
@@ -3039,24 +3040,24 @@ export default function App() {
                     animate={playerAnim === 'attack' ? { x: 40 } : playerAnim === 'hit' ? { x: [0, -10, 10, -10, 0], opacity: [1, 0.5, 1] } : { y: [0, 5, 0] }}
                     transition={playerAnim === 'idle' ? { repeat: Infinity, duration: 2 } : { duration: 0.3 }}
                     src={playerTeam[0].sprites.back_default || playerTeam[0].sprites.front_default} 
-                    className="w-40 h-40 sm:w-64 sm:h-64 object-contain drop-shadow-2xl"
+                    className="w-40 h-40 sm:w-64 sm:h-64 object-contain drop-shadow-2xl translate-y-4 sm:translate-y-8"
                     referrerPolicy="no-referrer"
                   />
                   <div className="bg-white p-2 sm:p-3 shadow-lg border-l-8 border-blue-500 w-48 sm:w-72 skew-x-[-10deg] mt-[-20px] sm:mt-[-40px] relative z-20">
-                    <div className="skew-x-[10deg] flex flex-col gap-0.5 sm:gap-1">
-                      <div className="flex justify-between items-center flex-wrap gap-y-1">
-                        <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
-                          <span className="font-black text-sm sm:text-xl italic uppercase truncate max-w-[80px] sm:max-w-none">{getLocalized(playerTeam[0])}</span>
-                          {playerTeam[0].status && (
-                            <span className="bg-slate-900 text-white text-[6px] sm:text-[8px] px-1 py-0.5 font-black uppercase tracking-tighter">
-                              {AILMENT_ZH[playerTeam[0].status] || playerTeam[0].status}
-                            </span>
-                          )}
-                          <div className="flex gap-1">
-                            {playerTeam[0].types.map(t => (
-                              <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
-                            ))}
-                          </div>
+                    <div className="skew-x-[10deg] flex flex-col gap-1 sm:gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-sm sm:text-xl italic uppercase truncate max-w-[120px] sm:max-w-none">{getLocalized(playerTeam[0])}</span>
+                        {playerTeam[0].status && (
+                          <span className="bg-slate-900 text-white text-[6px] sm:text-[8px] px-1 py-0.5 font-black uppercase tracking-tighter">
+                            {AILMENT_ZH[playerTeam[0].status] || playerTeam[0].status}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <div className="flex gap-1">
+                          {playerTeam[0].types.map(t => (
+                            <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
+                          ))}
                         </div>
                         <span className="text-[8px] sm:text-xs font-bold bg-slate-900 text-white px-1.5 sm:px-2 py-0.5">Lv.{playerTeam[0].level}</span>
                       </div>
