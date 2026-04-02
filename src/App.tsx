@@ -646,6 +646,8 @@ export default function App() {
   const [evolvedPokemon, setEvolvedPokemon] = useState<GamePokemon | null>(null);
   const [evolutionChoices, setEvolutionChoices] = useState<Pokemon[]>([]);
   const [selectedPokemonForEvolution, setSelectedPokemonForEvolution] = useState<{pokemon: GamePokemon, index: number} | null>(null);
+  const [canEvolveMap, setCanEvolveMap] = useState<Record<number, boolean>>({});
+  const [isCheckingEvolution, setIsCheckingEvolution] = useState(false);
 
   const uiStrings: Record<string, Record<string, string>> = {
     'zh-hans': {
@@ -767,6 +769,9 @@ export default function App() {
       confirmEvolution: '确认进化',
       confirmEvolutionDesc: '是否确定将 {name} 进化为 {target}？',
       evolveSuccessMsg: '恭喜！{name} 进化成为了 {target}！',
+      canEvolve: '可以进化',
+      cannotEvolveShort: '无法进化',
+      checkingEvolution: '正在检查进化...',
       shop: '商店',
       price: '价格',
       learningNewMove: '正在学习新技能...',
@@ -929,6 +934,9 @@ export default function App() {
       confirmEvolution: '確認進化',
       confirmEvolutionDesc: '是否確定將 {name} 進化為 {target}？',
       evolveSuccessMsg: '恭喜！{name} 進化成为了 {target}！',
+      canEvolve: '可以進化',
+      cannotEvolveShort: '無法進化',
+      checkingEvolution: '正在檢查進化...',
       shop: '商店',
       price: '價格',
       learningNewMove: '正在學習新技能...',
@@ -992,6 +1000,9 @@ export default function App() {
       learnMoveDesc: 'Let a Pokemon in your team learn a new move',
       evolutionReward: 'Pokemon Evolution',
       evolutionRewardDesc: 'Let a Pokemon in your team evolve to the next stage',
+      canEvolve: 'Can Evolve',
+      cannotEvolveShort: 'No Evolution',
+      checkingEvolution: 'Checking...',
       specialReward: 'Special Reward',
       joinTeam: 'Join Team',
       selectThis: 'Select This',
@@ -1143,6 +1154,26 @@ export default function App() {
       gameOver: 'GAME OVER'
     }
   };
+
+  useEffect(() => {
+    if (pendingRewardAction === 'EVOLUTION') {
+      const checkEvolutions = async () => {
+        setIsCheckingEvolution(true);
+        const results: Record<number, boolean> = {};
+        await Promise.all(playerTeam.map(async (p, idx) => {
+          try {
+            const nextEvolutionIds = await fetchEvolutionChain(p.id);
+            results[idx] = nextEvolutionIds.length > 0;
+          } catch (e) {
+            results[idx] = false;
+          }
+        }));
+        setCanEvolveMap(results);
+        setIsCheckingEvolution(false);
+      };
+      checkEvolutions();
+    }
+  }, [pendingRewardAction, playerTeam]);
 
   const t = useCallback((key: string, params?: Record<string, string | number>) => {
     const lang = currentLanguage.startsWith('zh') ? currentLanguage : (uiStrings[currentLanguage] ? currentLanguage : 'en');
@@ -3671,21 +3702,55 @@ export default function App() {
                     {!selectedPokemonForEvolution ? (
                       <div className="flex-1 flex flex-col overflow-hidden">
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 pb-8 overflow-y-auto custom-scrollbar pr-2">
-                          {playerTeam.map((p, idx) => (
-                            <div
-                              key={idx}
-                              className="bg-white p-8 shadow-xl hover:shadow-2xl transition-all border-b-4 border-slate-100 hover:border-purple-500 group flex flex-col items-center"
-                            >
-                              <img src={p.sprites.front_default} className="w-32 h-32 mx-auto mb-4 group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
-                              <div className="font-black italic text-2xl uppercase">{getLocalized(p)}</div>
-                              <button
-                                onClick={() => startEvolution(p, idx)}
-                                className="w-full mt-6 py-3 bg-purple-500 text-white font-black italic text-base hover:bg-purple-600 transition-colors skew-x-[-10deg]"
+                          {playerTeam.map((p, idx) => {
+                            const canEvolve = canEvolveMap[idx];
+                            return (
+                              <div
+                                key={idx}
+                                className={`bg-white p-6 shadow-xl transition-all border-b-4 flex flex-col items-center text-center ${
+                                  canEvolve ? 'border-purple-500 hover:shadow-2xl' : 'border-slate-200 opacity-75'
+                                }`}
                               >
-                                <span className="skew-x-[10deg] inline-block">{t('evolve')}</span>
-                              </button>
-                            </div>
-                          ))}
+                                <div className="relative">
+                                  <img 
+                                    src={p.sprites.front_default} 
+                                    className={`w-32 h-32 mx-auto mb-2 transition-transform ${canEvolve ? 'group-hover:scale-110' : 'grayscale'}`} 
+                                    referrerPolicy="no-referrer" 
+                                  />
+                                  {isCheckingEvolution ? (
+                                    <div className="absolute top-0 right-0 bg-slate-100 text-slate-500 text-[10px] px-2 py-1 font-bold italic rounded-full animate-pulse">
+                                      {t('checkingEvolution')}
+                                    </div>
+                                  ) : (
+                                    <div className={`absolute top-0 right-0 text-[10px] px-2 py-1 font-black italic rounded-full skew-x-[-10deg] ${
+                                      canEvolve ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-500'
+                                    }`}>
+                                      <span className="skew-x-[10deg] inline-block uppercase">
+                                        {canEvolve ? t('canEvolve') : t('cannotEvolveShort')}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="font-black italic text-xl uppercase text-slate-900">{getLocalized(p)}</div>
+                                <div className="flex gap-1 mt-2">
+                                  {p.types.map(t => (
+                                    <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
+                                  ))}
+                                </div>
+                                <button
+                                  disabled={!canEvolve || isCheckingEvolution}
+                                  onClick={() => startEvolution(p, idx)}
+                                  className={`w-full mt-6 py-3 font-black italic text-base transition-all skew-x-[-10deg] ${
+                                    canEvolve 
+                                      ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg hover:shadow-purple-200' 
+                                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                  }`}
+                                >
+                                  <span className="skew-x-[10deg] inline-block">{t('evolve')}</span>
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                         <div className="mt-auto pt-4 flex-none">
                           <button 
@@ -3707,17 +3772,17 @@ export default function App() {
                               whileHover={{ scale: 1.02 }}
                               whileTap={{ scale: 0.98 }}
                               onClick={() => setEvolutionConfirmChoice(choice)}
-                              className="bg-white p-6 md:p-10 rounded-2xl shadow-xl border-2 md:border-4 border-purple-100 hover:border-purple-500 transition-all flex items-center md:flex-col gap-6 md:gap-0 group relative overflow-hidden"
+                              className="bg-white p-8 rounded-2xl shadow-xl border-4 border-purple-100 hover:border-purple-500 transition-all flex flex-col items-center text-center group relative overflow-hidden"
                             >
-                              <div className="absolute top-0 right-0 w-16 h-16 md:w-24 md:h-24 bg-purple-500 skew-x-[45deg] translate-x-8 md:translate-x-12 -translate-y-8 md:-translate-y-12 group-hover:translate-x-6 md:group-hover:translate-x-8 group-hover:-translate-y-6 md:group-hover:-translate-y-8 transition-transform" />
+                              <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500 skew-x-[45deg] translate-x-12 -translate-y-12 group-hover:translate-x-8 group-hover:-translate-y-8 transition-transform" />
                               <img 
                                 src={choice.sprites.front_default} 
-                                className="w-24 h-24 md:w-48 md:h-48 group-hover:scale-110 transition-transform z-10" 
+                                className="w-40 h-40 group-hover:scale-110 transition-transform z-10" 
                                 referrerPolicy="no-referrer" 
                               />
-                              <div className="flex-1 md:flex-none text-left md:text-center z-10">
-                                <div className="font-black italic text-xl md:text-3xl uppercase text-slate-900">{getLocalized(choice)}</div>
-                                <div className="mt-2 md:mt-6 flex gap-1 md:gap-2">
+                              <div className="z-10 mt-4">
+                                <div className="font-black italic text-2xl uppercase text-slate-900">{getLocalized(choice)}</div>
+                                <div className="mt-4 flex justify-center gap-2">
                                   {choice.types.map(t => (
                                     <TypeBadge key={t.type.name} type={t.type.name} size="sm" />
                                   ))}

@@ -113,7 +113,7 @@ export class DamageSkillStrategy extends BaseSkillStrategy {
       if (multiplier > 1) await addMessages(['效果绝佳！']);
       if (multiplier < 1 && multiplier > 0) await addMessages(['效果不好...']);
       if (multiplier === 0) await addMessages(['没有效果...']);
-      await addMessages([`${attackerName} 造成了 ${damage} 点伤害！`]);
+      // await addMessages([`${attackerName} 造成了 ${damage} 点伤害！`]);
     }
 
     // Handle Ailments and Stat Changes
