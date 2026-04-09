@@ -3,6 +3,26 @@ import { GENERATIONS, NATURES } from '../constants';
 
 const BASE_URL = 'https://pokeapi.co/api/v2';
 
+async function fetchWithRetry(url: string, options: RequestInit = {}, retries: number = 3, backoff: number = 300): Promise<Response> {
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      if (retries > 0 && (response.status >= 500 || response.status === 429)) {
+        await new Promise(resolve => setTimeout(resolve, backoff));
+        return fetchWithRetry(url, options, retries - 1, backoff * 2);
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response;
+  } catch (error) {
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, backoff));
+      return fetchWithRetry(url, options, retries - 1, backoff * 2);
+    }
+    throw error;
+  }
+}
+
 export async function getRandomPokemonId(selectedGens: number[] = [1]): Promise<number> {
   const possibleGens = GENERATIONS.filter(g => selectedGens.includes(g.id));
   const targetGen = possibleGens[Math.floor(Math.random() * possibleGens.length)] || GENERATIONS[0];
@@ -31,13 +51,13 @@ function getZhDescription(entries: any[]): string | undefined {
 }
 
 export async function fetchPokemon(id: number): Promise<Pokemon> {
-  const response = await fetch(`${BASE_URL}/pokemon/${id}`);
+  const response = await fetchWithRetry(`${BASE_URL}/pokemon/${id}`);
   if (!response.ok) throw new Error('Failed to fetch pokemon');
   const data = await response.json();
   
   // Fetch Chinese name from species
   try {
-    const speciesRes = await fetch(data.species.url);
+    const speciesRes = await fetchWithRetry(data.species.url);
     const speciesData = await speciesRes.json();
     data.names = speciesData.names;
     const zhName = getZhName(speciesData.names);
@@ -59,7 +79,7 @@ export async function fetchPokemon(id: number): Promise<Pokemon> {
 
 export async function fetchAbilityNames(url: string): Promise<any[]> {
   try {
-    const response = await fetch(url);
+    const response = await fetchWithRetry(url);
     if (!response.ok) return [];
     const data = await response.json();
     return data.names;
@@ -70,7 +90,7 @@ export async function fetchAbilityNames(url: string): Promise<any[]> {
 
 export async function fetchAbility(url: string): Promise<string> {
   try {
-    const response = await fetch(url);
+    const response = await fetchWithRetry(url);
     if (!response.ok) return '';
     const data = await response.json();
     const zhName = getZhName(data.names);
@@ -81,7 +101,7 @@ export async function fetchAbility(url: string): Promise<string> {
 }
 
 export async function fetchMove(url: string): Promise<Move> {
-  const response = await fetch(url);
+  const response = await fetchWithRetry(url);
   if (!response.ok) throw new Error('Failed to fetch move');
   const data = await response.json();
   
@@ -126,10 +146,10 @@ export async function fetchMove(url: string): Promise<Move> {
 
 export async function fetchEvolutionChain(pokemonId: number): Promise<number[]> {
   try {
-    const speciesRes = await fetch(`${BASE_URL}/pokemon-species/${pokemonId}`);
+    const speciesRes = await fetchWithRetry(`${BASE_URL}/pokemon-species/${pokemonId}`);
     if (!speciesRes.ok) return [];
     const speciesData = await speciesRes.json();
-    const evolutionRes = await fetch(speciesData.evolution_chain.url);
+    const evolutionRes = await fetchWithRetry(speciesData.evolution_chain.url);
     if (!evolutionRes.ok) return [];
     const evolutionData = await evolutionRes.json();
     
@@ -301,14 +321,14 @@ export async function getProcessedPokemon(
 
 export async function fetchPokeBalls(): Promise<Item[]> {
   try {
-    const response = await fetch(`${BASE_URL}/item-category/34`);
+    const response = await fetchWithRetry(`${BASE_URL}/item-category/34`);
     if (!response.ok) return [];
     const data = await response.json();
     
     const balls: Item[] = [];
     for (const itemRef of data.items) {
       try {
-        const itemRes = await fetch(itemRef.url);
+        const itemRes = await fetchWithRetry(itemRef.url);
         const itemData = await itemRes.json();
         
         const zhName = getZhName(itemData.names);
