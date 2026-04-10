@@ -627,6 +627,8 @@ export default function App() {
   const [startLevel, setStartLevel] = useState<number>(50);
   const [starterOptions, setStarterOptions] = useState<GamePokemon[]>([]);
   const [selectedStarterIndices, setSelectedStarterIndices] = useState<number[]>([]);
+  const [rewardPokemonOptions, setRewardPokemonOptions] = useState<GamePokemon[]>([]);
+  const [showRewardPokemonSelect, setShowRewardPokemonSelect] = useState(false);
   const [hoveredMove, setHoveredMove] = useState<Move | null>(null);
   const [infoPokemonIdx, setInfoPokemonIdx] = useState<number | null>(null);
   const [prevGameState, setPrevGameState] = useState<GameState>('START');
@@ -724,9 +726,12 @@ export default function App() {
       searchingPokemon: '正在寻找宝可梦...',
       battleHistory: '对战历史',
       chooseStarter: '选择你的初始伙伴',
-      chooseStarterDesc: '请选择2只宝可梦作为你的初始伙伴。点击卡片进行选择，再次点击取消。',
-      selectTwoStarters: '请选择2只宝可梦',
+      chooseStarterDesc: '请选择 3 只宝可梦作为你的初始伙伴。点击卡片进行选择，再次点击取消。',
+      selectThreeStarters: '请选择 3 只宝可梦',
       confirmSelection: '确认选择并开始冒险',
+      chooseNewPartner: '选择新的伙伴',
+      newPartner: '新的伙伴',
+      newPartnerDesc: '从随机出现的宝可梦中选择一只加入你的队伍',
       startingMoves: '初始技能',
       viewDetails: '查看详情',
       iChooseYou: '就决定是你了！',
@@ -893,9 +898,12 @@ export default function App() {
       searchingPokemon: '正在尋找寶可夢...',
       battleHistory: '對戰歷史',
       chooseStarter: '選擇你的初始夥伴',
-      chooseStarterDesc: '請選擇2隻寶可夢作為你的初始夥伴。點擊卡片進行選擇，再次點擊取消。',
-      selectTwoStarters: '請選擇2隻寶可夢',
+      chooseStarterDesc: '請選擇 3 隻寶可夢作為你的初始夥伴。點擊卡片進行選擇，再次點擊取消。',
+      selectThreeStarters: '請選擇 3 隻寶可夢',
       confirmSelection: '確認選擇並開始冒險',
+      chooseNewPartner: '選擇新的夥伴',
+      newPartner: '新的夥伴',
+      newPartnerDesc: '從隨機出現的寶可夢中選擇一隻加入你的隊伍',
       startingMoves: '初始技能',
       viewDetails: '查看詳情',
       iChooseYou: '就決定是你了！',
@@ -1066,9 +1074,12 @@ export default function App() {
       searchingPokemon: 'Searching for Pokemon...',
       battleHistory: 'Battle History',
       chooseStarter: 'Choose Your Starter',
-      chooseStarterDesc: 'Please select 2 Pokemon as your initial partners. Click a card to select, click again to deselect.',
-      selectTwoStarters: 'Please select 2 Pokemon',
+      chooseStarterDesc: 'Please select 3 Pokemon as your initial partners. Click a card to select, click again to deselect.',
+      selectThreeStarters: 'Please select 3 Pokemon',
       confirmSelection: 'Confirm & Start Adventure',
+      chooseNewPartner: 'Choose New Partner',
+      newPartner: 'New Partner',
+      newPartnerDesc: 'Choose one from randomly appearing Pokemon to join your team',
       startingMoves: 'Starting Moves',
       viewDetails: 'View Details',
       iChooseYou: 'I choose you!',
@@ -1274,6 +1285,8 @@ export default function App() {
   // 动画状态
   const [playerAnim, setPlayerAnim] = useState<'idle' | 'attack' | 'hit'>('idle');
   const [enemyAnim, setEnemyAnim] = useState<'idle' | 'attack' | 'hit'>('idle');
+  const [infoTab, setInfoTab] = useState<'STATS' | 'STATUS'>('STATS');
+  const [showTeamActionMenu, setShowTeamActionMenu] = useState<number | null>(null);
   const [isFaintedReplacement, setIsFaintedReplacement] = useState(false);
   const [activeMoveType, setActiveMoveType] = useState<string | null>(null);
   const [isCatching, setIsCatching] = useState(false);
@@ -1295,14 +1308,15 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      // 生成4个随机宝可梦供选择
+      // 生成6个随机宝可梦供选择
       const starterIds = [];
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 6; i++) {
         starterIds.push(await getRandomPokemonId(selectedGens));
       }
       const starters = await Promise.all(starterIds.map(id => getProcessedPokemon(id, startLevel)));
       setStarterOptions(starters);
       setSelectedStarterIndices([]);
+      setInfoPokemonIdx(0); // Default to first one
       
       // 初始道具：1个回复药，5个精灵球
       const initialInventory: Item[] = [];
@@ -1330,7 +1344,7 @@ export default function App() {
       if (prev.includes(index)) {
         return prev.filter(i => i !== index);
       }
-      if (prev.length < 2) {
+      if (prev.length < 3) {
         return [...prev, index];
       }
       return prev;
@@ -1338,7 +1352,7 @@ export default function App() {
   };
 
   const confirmStarters = async () => {
-    if (selectedStarterIndices.length !== 2) return;
+    if (selectedStarterIndices.length !== 3) return;
     
     const starters = selectedStarterIndices.map(idx => starterOptions[idx]);
     setPlayerTeam(starters);
@@ -1546,9 +1560,17 @@ export default function App() {
   };
 
   const switchPokemon = async (index: number) => {
-    if ((gameState !== 'BATTLE' && gameState !== 'POKEMON_INFO') || index === 0 || isMessageProcessing) return;
-    if (gameState === 'POKEMON_INFO') setGameState('BATTLE');
+    // 基础验证：必须是合法的游戏状态，且不能选择当前在场上的宝可梦（index 0）
+    if ((gameState !== 'BATTLE' && gameState !== 'POKEMON_INFO') || index === 0) return;
+    
+    // 如果正在处理消息，通常不允许操作，但如果是被迫换人（首位倒下），则允许操作以防卡死
+    if (isMessageProcessing && !isFaintedReplacement) return;
+
+    // 验证回合：如果不是被迫换人，则必须是玩家回合
     if (!isFaintedReplacement && turn !== 'PLAYER') return;
+
+    // 如果是从信息界面进入的，切换回战斗界面
+    if (gameState === 'POKEMON_INFO') setGameState('BATTLE');
     
     const newTeam = [...playerTeam];
     const temp = newTeam[0];
@@ -2212,6 +2234,35 @@ export default function App() {
     }
   };
 
+  const TYPE_GRADIENTS: Record<string, string> = {
+    normal: 'from-slate-400 to-slate-600',
+    fire: 'from-orange-400 to-red-600',
+    water: 'from-blue-400 to-blue-600',
+    electric: 'from-yellow-300 to-yellow-600',
+    grass: 'from-emerald-400 to-green-600',
+    ice: 'from-cyan-300 to-blue-500',
+    fighting: 'from-red-600 to-red-800',
+    poison: 'from-purple-400 to-purple-600',
+    ground: 'from-yellow-600 to-yellow-800',
+    flying: 'from-indigo-300 to-indigo-500',
+    psychic: 'from-pink-400 to-pink-600',
+    bug: 'from-lime-400 to-lime-600',
+    rock: 'from-stone-500 to-stone-700',
+    ghost: 'from-purple-600 to-indigo-800',
+    dragon: 'from-indigo-600 to-purple-800',
+    dark: 'from-slate-700 to-slate-900',
+    steel: 'from-slate-300 to-slate-500',
+    fairy: 'from-pink-300 to-pink-500',
+  };
+
+  const getEffectivenessText = (moveType: string, defender: GamePokemon) => {
+    const multiplier = getTypeEffectiveness(moveType, defender.types);
+    if (multiplier > 1) return { text: '效果绝佳', color: 'text-yellow-300', icon: '◎' };
+    if (multiplier < 1 && multiplier > 0) return { text: '效果不好', color: 'text-slate-300', icon: '△' };
+    if (multiplier === 0) return { text: '没有效果', color: 'text-slate-400', icon: '×' };
+    return null;
+  };
+
   const winBattle = async (isCatch = false) => {
     setLoading(true);
     try {
@@ -2390,15 +2441,7 @@ export default function App() {
         usedItems.add(item.id);
         newRewards.push({ type, data: item });
       } else if (type === 'POKEMON') {
-        let pokeId;
-        let attempts = 0;
-        do {
-          pokeId = await getRandomPokemonId(selectedGens);
-          attempts++;
-        } while (usedPokemonIds.has(pokeId) && attempts < 10);
-        usedPokemonIds.add(pokeId);
-        const newPoke = await getProcessedPokemon(pokeId, startLevel);
-        newRewards.push({ type, data: newPoke });
+        newRewards.push({ type, data: null });
       } else if (type === 'MOVE') {
         newRewards.push({ type, data: null });
       } else if (type === 'EVOLUTION') {
@@ -2447,7 +2490,7 @@ export default function App() {
   };
 
 
-  const selectReward = (reward: any) => {
+  const selectReward = async (reward: any) => {
     if (reward.type === 'SHOP_ITEM') {
       if (coins < reward.data.price) return;
       setCoins(prev => prev - reward.data.price);
@@ -2463,11 +2506,21 @@ export default function App() {
       setRewardChoiceMade(true);
       setInventory(prev => [...prev, reward.data]);
     } else if (reward.type === 'POKEMON') {
-      if (playerTeam.length < 6) {
+      setLoading(true);
+      try {
+        const options = [];
+        for (let i = 0; i < 3; i++) {
+          options.push(await getRandomPokemonId(selectedGens));
+        }
+        const pokes = await Promise.all(options.map(id => getProcessedPokemon(id, startLevel)));
+        setRewardPokemonOptions(pokes);
+        setShowRewardPokemonSelect(true);
+        setInfoPokemonIdx(0);
         setRewardChoiceMade(true);
-        setPlayerTeam(prev => [...prev, reward.data]);
-      } else {
-        setShowReplaceUI(reward.data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
     } else if (reward.type === 'MOVE') {
       setRewardChoiceMade(true);
@@ -2481,6 +2534,16 @@ export default function App() {
       setSelectedPokemonForEvolution(null);
       setEvolutionChoices([]);
     }
+  };
+
+  const confirmRewardPokemon = (pokemon: GamePokemon) => {
+    if (playerTeam.length < 6) {
+      setPlayerTeam(prev => [...prev, pokemon]);
+    } else {
+      setShowReplaceUI(pokemon);
+    }
+    setShowRewardPokemonSelect(false);
+    setRewardPokemonOptions([]);
   };
 
   const startEvolution = async (pokemon: GamePokemon, index: number) => {
@@ -2745,122 +2808,391 @@ export default function App() {
         </header>
 
         {gameState === 'STARTER_SELECT' && (
-            <motion.div 
-              key="starter-select"
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex-1 flex flex-col py-4 overflow-hidden h-full"
-            >
-              <div className="text-center mb-4 flex-none px-4">
-                <div className="inline-block bg-slate-900 px-6 md:px-12 py-2 md:py-3 skew-x-[-12deg] shadow-xl mb-2 md:mb-4">
-                  <h2 className="text-xl md:text-3xl font-black italic tracking-tighter skew-x-[12deg] text-white uppercase">{t('chooseStarter')}</h2>
+          <motion.div 
+            key="starter-select"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 z-[100] bg-gradient-to-br from-blue-600 via-purple-500 to-pink-500 flex flex-col overflow-hidden"
+          >
+            {/* Header */}
+            <div className="p-6 flex justify-between items-center relative z-20">
+              <div className="flex items-center gap-4">
+                <div className="bg-white/20 backdrop-blur-md px-6 py-2 skew-x-[-10deg] border border-white/30">
+                  <h2 className="text-2xl font-black italic tracking-tighter skew-x-[10deg] text-white uppercase">{t('chooseStarter')}</h2>
                 </div>
-                <div className="flex justify-center gap-2 mb-2">
-                  {[0, 1].map(i => (
-                    <div key={i} className={`w-3 h-3 rounded-full border-2 ${selectedStarterIndices.length > i ? 'bg-blue-500 border-blue-500' : 'bg-transparent border-slate-300'}`} />
+                <div className="flex gap-2">
+                  {[0, 1, 2].map(i => (
+                    <div key={i} className={`w-4 h-4 rounded-full border-2 ${selectedStarterIndices.length > i ? 'bg-yellow-400 border-yellow-400' : 'bg-transparent border-white/30'}`} />
                   ))}
-                  <span className="text-xs font-black italic text-slate-400 ml-2 uppercase">
-                    {selectedStarterIndices.length}/2 {t('selectTwoStarters')}
-                  </span>
                 </div>
               </div>
+              <div className="bg-slate-900/40 backdrop-blur-md px-6 py-2 skew-x-[-10deg] border border-white/10">
+                <span className="text-white font-black italic skew-x-[10deg] inline-block uppercase tracking-widest">
+                  {selectedStarterIndices.length}/3 {t('selectThreeStarters')}
+                </span>
+              </div>
+            </div>
 
-              <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-24">
-                <div className="grid grid-cols-2 gap-3 md:gap-6 max-w-4xl mx-auto w-full">
-                  {starterOptions.map((p, idx) => {
-                    const isSelected = selectedStarterIndices.includes(idx);
-                    return (
-                      <motion.div
-                        key={idx}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => toggleStarterSelection(idx)}
-                        className={`bg-white p-3 md:p-6 shadow-lg transition-all border-4 cursor-pointer flex flex-col items-center relative ${isSelected ? 'border-blue-500 ring-4 ring-blue-100' : 'border-slate-100 hover:border-slate-300'}`}
-                      >
-                        {isSelected && (
-                          <div className="absolute -top-3 -right-3 bg-blue-500 text-white p-1 rounded-full shadow-lg z-20">
-                            <Sparkles className="w-4 h-4" />
-                          </div>
-                        )}
-                        <div className="absolute top-1 right-1 md:top-2 md:right-2 bg-slate-100 px-1.5 py-0.5 text-[8px] md:text-[10px] font-black italic">
-                          等级 {p.level}
+            {/* Main Content Area */}
+            <div className="flex-1 flex items-center justify-center relative px-8">
+              {infoPokemonIdx !== null && starterOptions[infoPokemonIdx] && (
+                <div className="w-full max-w-7xl grid grid-cols-12 gap-8 items-center">
+                  {/* Left Panel: Stats */}
+                  <motion.div 
+                    key={`stats-${infoPokemonIdx}`}
+                    initial={{ x: -50, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    className="col-span-3 bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-[2rem] shadow-2xl"
+                  >
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                        <img src="/pokeball_icon.png" className="w-5 h-5 opacity-80" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                      </div>
+                      <h3 className="text-2xl font-black italic text-white tracking-tight uppercase">{getLocalized(starterOptions[infoPokemonIdx])}</h3>
+                      {starterOptions[infoPokemonIdx].gender === 'male' && <Mars className="w-5 h-5 text-blue-400" />}
+                      {starterOptions[infoPokemonIdx].gender === 'female' && <Venus className="w-5 h-5 text-pink-400" />}
+                    </div>
+
+                    <div className="flex gap-2 mb-6">
+                      {starterOptions[infoPokemonIdx].types.map((t: any) => (
+                        <div key={t.type.name} className="flex items-center gap-2 bg-slate-900/60 px-4 py-1 rounded-lg border border-white/10">
+                          <TypeBadge type={t.type.name} size="xs" />
+                          <span className="text-[10px] font-black italic text-white uppercase">{TYPE_ZH[t.type.name as keyof typeof TYPE_ZH]}</span>
                         </div>
-                        <div className="relative mb-1 md:mb-2">
-                          <div className={`absolute inset-0 bg-blue-50 rounded-full scale-110 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`}></div>
-                          <img 
-                            src={p.sprites.front_default} 
-                            alt={getLocalized(p)} 
-                            className="w-16 h-16 md:w-24 md:h-24 object-contain relative z-10 drop-shadow-lg"
-                            referrerPolicy="no-referrer"
-                          />
-                        </div>
-                        <div className="flex flex-wrap items-center justify-center gap-2 mb-2">
-                          <div className="flex items-center gap-1">
-                            <h3 className="text-sm md:text-lg font-black italic uppercase tracking-tighter truncate max-w-[120px] md:max-w-[180px] text-center">{getLocalized(p)}</h3>
-                            {p.gender === 'male' && <Mars className="w-3 h-3 md:w-4 md:h-4 text-blue-500" />}
-                            {p.gender === 'female' && <Venus className="w-3 h-3 md:w-4 md:h-4 text-pink-500" />}
-                          </div>
-                          <div className="flex flex-wrap justify-center gap-1">
-                            {p.types.map((t: any) => (
-                              <TypeBadge key={t.type.name} type={t.type.name} size="xs" className="skew-x-[-10deg]" />
-                            ))}
-                            <div className="bg-slate-100 px-1.5 py-0.5 rounded text-[8px] md:text-[10px] font-black italic text-slate-500 uppercase">
-                              {getLocalizedNature(p.nature)}
+                      ))}
+                    </div>
+
+                    <div className="space-y-3 mb-8">
+                      {Object.entries(starterOptions[infoPokemonIdx].calculatedStats).map(([stat, val]) => {
+                        const numVal = val as number;
+                        const maxVal = 255;
+                        const percentage = (numVal / maxVal) * 100;
+                        const statName = stat === 'hp' ? 'HP' : 
+                                         stat === 'attack' ? '攻击' : 
+                                         stat === 'defense' ? '防御' : 
+                                         stat === 'special-attack' ? '特攻' : 
+                                         stat === 'special-defense' ? '特防' : '速度';
+                        const Icon = stat === 'hp' ? Heart : 
+                                     stat === 'attack' ? Sword : 
+                                     stat === 'defense' ? Shield : 
+                                     stat === 'special-attack' ? Zap : 
+                                     stat === 'special-defense' ? Shield : RefreshCw;
+                        
+                        return (
+                          <div key={stat} className="flex flex-col gap-1">
+                            <div className="flex justify-between items-center text-[11px] font-black italic text-white/80 uppercase">
+                              <div className="flex items-center gap-2">
+                                <Icon className="w-3 h-3" /> {statName}
+                              </div>
+                              <span>{val}</span>
+                            </div>
+                            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden border border-white/5">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${percentage}%` }}
+                                className={`h-full rounded-full ${stat === 'hp' ? 'bg-pink-500' : 'bg-yellow-400'}`}
+                              />
                             </div>
                           </div>
-                        </div>
+                        );
+                      })}
+                    </div>
 
-                        <div className="w-full space-y-1 mb-3">
-                          <div className="text-[7px] md:text-[8px] font-black uppercase text-slate-400 tracking-widest mb-1">{t('startingMoves')}</div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-                            {p.selectedMoves.slice(0, 4).map((m, mi) => (
-                              <div key={mi} className="flex justify-between items-center bg-slate-50 p-1 text-[7px] md:text-[8px] font-bold italic border-l-2 border-slate-200">
-                                <span className="truncate pr-1">{getLocalized(m)}</span>
-                                <TypeBadge type={m.type} size="xs" />
-                              </div>
-                            ))}
-                            {/* Fill empty slots if less than 4 moves */}
-                            {Array.from({ length: Math.max(0, 4 - p.selectedMoves.length) }).map((_, i) => (
-                              <div key={`empty-${i}`} className="bg-slate-50/50 p-1 text-[8px] font-bold italic border-l-2 border-slate-100 text-slate-300">
-                                --
-                              </div>
-                            ))}
+                    <div className="flex gap-2">
+                      <div className="flex-1 bg-white/5 border border-white/10 px-4 py-2 rounded-xl text-center">
+                        <div className="text-[8px] font-black text-white/40 uppercase mb-1">能力调整</div>
+                        <div className="text-xs font-black italic text-white">--</div>
+                      </div>
+                      <div className="flex-1 bg-white/5 border border-white/10 px-4 py-2 rounded-xl text-center">
+                        <div className="text-[8px] font-black text-white/40 uppercase mb-1">性格</div>
+                        <div className="text-xs font-black italic text-white">{getLocalizedNature(starterOptions[infoPokemonIdx].nature)}</div>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  {/* Center: Sprite */}
+                  <div className="col-span-6 flex flex-col items-center justify-center relative">
+                    <motion.div
+                      key={`sprite-${infoPokemonIdx}`}
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="relative"
+                    >
+                      <div className="absolute inset-0 bg-white/10 blur-3xl rounded-full scale-150" />
+                      <img 
+                        src={starterOptions[infoPokemonIdx].sprites.front_default} 
+                        className="w-80 h-80 object-contain relative z-10 drop-shadow-[0_20px_50px_rgba(0,0,0,0.3)] pixelated"
+                        referrerPolicy="no-referrer"
+                      />
+                    </motion.div>
+                    
+                    <button
+                      onClick={() => toggleStarterSelection(infoPokemonIdx!)}
+                      className={`mt-8 px-12 py-4 skew-x-[-12deg] font-black italic text-xl transition-all shadow-2xl ${
+                        infoPokemonIdx !== null && selectedStarterIndices.includes(infoPokemonIdx)
+                          ? 'bg-red-500 text-white hover:bg-red-600'
+                          : 'bg-yellow-400 text-slate-900 hover:bg-yellow-500'
+                      }`}
+                    >
+                      <span className="skew-x-[12deg] inline-block uppercase">
+                        {infoPokemonIdx !== null && selectedStarterIndices.includes(infoPokemonIdx) ? t('cancel') : t('confirm')}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Right Panel: Moves & Ability */}
+                  <motion.div 
+                    key={`moves-${infoPokemonIdx}`}
+                    initial={{ x: 50, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    className="col-span-3 space-y-6"
+                  >
+                    <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-[2rem] shadow-2xl">
+                      <div className="text-[10px] font-black italic text-white/40 uppercase mb-4 tracking-widest border-b border-white/10 pb-2">招式</div>
+                      <div className="space-y-3">
+                        {starterOptions[infoPokemonIdx].selectedMoves.slice(0, 4).map((m, mi) => (
+                          <div key={mi} className="flex items-center gap-3 bg-white/5 hover:bg-white/10 p-3 rounded-xl border border-white/5 transition-colors group">
+                            <TypeBadge type={m.type} size="sm" />
+                            <div className="flex-1">
+                              <div className="text-sm font-black italic text-white group-hover:text-yellow-400 transition-colors">{getLocalized(m)}</div>
+                              <div className="text-[9px] font-black text-white/40 uppercase">PP {m.pp}/{m.pp}</div>
+                            </div>
                           </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-[2rem] shadow-2xl">
+                      <div className="text-[10px] font-black italic text-white/40 uppercase mb-4 tracking-widest border-b border-white/10 pb-2">特性</div>
+                      <div className="bg-white/90 px-6 py-3 rounded-xl text-center shadow-inner">
+                        <div className="text-slate-900 font-black italic uppercase tracking-tighter">
+                          {starterOptions[infoPokemonIdx].ability?.name ? getLocalized(starterOptions[infoPokemonIdx].ability) : '扬沙'}
                         </div>
-                        
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setInfoPokemonIdx(idx);
-                            setPrevGameState('STARTER_SELECT');
-                            setGameState('POKEMON_INFO');
-                          }}
-                          className="mt-auto w-full py-1 bg-slate-100 text-slate-500 font-black italic hover:bg-slate-200 transition-all text-[8px] md:text-[10px] uppercase"
-                        >
-                          {t('viewDetails')}
-                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom: Icon List */}
+            <div className="p-8 pb-12 bg-black/20 backdrop-blur-md border-t border-white/10 flex justify-center gap-6 relative z-20">
+              {starterOptions.map((p, idx) => {
+                const isSelected = selectedStarterIndices.includes(idx);
+                const isCurrent = infoPokemonIdx === idx;
+                return (
+                  <div 
+                    key={idx} 
+                    className="relative group cursor-pointer" 
+                    onClick={() => setInfoPokemonIdx(idx)}
+                  >
+                    {isCurrent && (
+                      <motion.div 
+                        layoutId="active-indicator"
+                        className="absolute -top-8 left-1/2 -translate-x-1/2 text-yellow-400"
+                      >
+                        <ChevronRight className="w-8 h-8 rotate-90 fill-current" />
                       </motion.div>
-                    );
-                  })}
+                    )}
+                    <div className={`w-20 h-20 rounded-2xl border-4 transition-all overflow-hidden relative ${
+                      isCurrent ? 'border-yellow-400 bg-white/30 scale-110 shadow-2xl' : 
+                      isSelected ? 'border-blue-400 bg-white/10' : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}>
+                      <img 
+                        src={p.sprites.front_default} 
+                        className={`w-full h-full object-contain pixelated transition-transform ${isCurrent ? 'scale-125' : 'group-hover:scale-110'}`} 
+                        referrerPolicy="no-referrer"
+                      />
+                      {isSelected && (
+                        <div className="absolute top-1 right-1 bg-blue-500 rounded-full p-1 shadow-lg">
+                          <Sparkles className="w-3 h-3 text-white" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Confirm Button Overlay */}
+            {selectedStarterIndices.length === 3 && (
+              <motion.div 
+                initial={{ y: 100 }}
+                animate={{ y: 0 }}
+                className="fixed bottom-32 left-1/2 -translate-x-1/2 z-50"
+              >
+                <button
+                  onClick={confirmStarters}
+                  className="px-16 py-5 bg-slate-900 text-white font-black italic text-2xl skew-x-[-12deg] shadow-[12px_12px_0px_rgba(0,0,0,0.3)] hover:bg-blue-600 hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all border-2 border-white/20"
+                >
+                  <span className="flex items-center gap-4 skew-x-[12deg]">
+                    {t('confirmSelection')} <ChevronRight className="w-8 h-8" />
+                  </span>
+                </button>
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+
+        {/* 奖励宝可梦选择界面 */}
+        <AnimatePresence>
+          {showRewardPokemonSelect && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[120] bg-slate-900/90 backdrop-blur-md flex flex-col overflow-hidden"
+            >
+              <div className="p-6 flex justify-between items-center relative z-20">
+                <div className="bg-white/10 backdrop-blur-md px-6 py-2 skew-x-[-10deg] border border-white/20">
+                  <h2 className="text-2xl font-black italic tracking-tighter skew-x-[10deg] text-white uppercase">{t('chooseNewPartner')}</h2>
                 </div>
               </div>
 
-              {selectedStarterIndices.length === 2 && (
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-50">
-                  <motion.button
-                    initial={{ scale: 0.8, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    onClick={confirmStarters}
-                    className="px-12 py-4 bg-blue-600 text-white font-black italic text-lg md:text-xl skew-x-[-12deg] shadow-[8px_8px_0px_#1e3a8a] hover:bg-blue-700 hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
-                  >
-                    <span className="flex items-center gap-3 skew-x-[12deg]">
-                      {t('confirmSelection')} <ChevronRight className="w-6 h-6" />
-                    </span>
-                  </motion.button>
-                </div>
-              )}
+              <div className="flex-1 flex items-center justify-center relative px-8">
+                {infoPokemonIdx !== null && rewardPokemonOptions[infoPokemonIdx] && (
+                  <div className="w-full max-w-7xl grid grid-cols-12 gap-8 items-center">
+                    {/* Left Panel: Stats */}
+                    <motion.div 
+                      key={`reward-stats-${infoPokemonIdx}`}
+                      initial={{ x: -50, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      className="col-span-3 bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-[2rem] shadow-2xl"
+                    >
+                      <div className="flex items-center gap-3 mb-4">
+                        <h3 className="text-2xl font-black italic text-white tracking-tight uppercase">{getLocalized(rewardPokemonOptions[infoPokemonIdx])}</h3>
+                        {rewardPokemonOptions[infoPokemonIdx].gender === 'male' && <Mars className="w-5 h-5 text-blue-400" />}
+                        {rewardPokemonOptions[infoPokemonIdx].gender === 'female' && <Venus className="w-5 h-5 text-pink-400" />}
+                      </div>
+
+                      <div className="flex gap-2 mb-6">
+                        {rewardPokemonOptions[infoPokemonIdx].types.map((t: any) => (
+                          <div key={t.type.name} className="flex items-center gap-2 bg-slate-900/60 px-4 py-1 rounded-lg border border-white/10">
+                            <TypeBadge type={t.type.name} size="xs" />
+                            <span className="text-[10px] font-black italic text-white uppercase">{TYPE_ZH[t.type.name as keyof typeof TYPE_ZH]}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="space-y-3 mb-8">
+                        {Object.entries(rewardPokemonOptions[infoPokemonIdx].calculatedStats).map(([stat, val]) => {
+                          const numVal = val as number;
+                          const maxVal = 255;
+                          const percentage = (numVal / maxVal) * 100;
+                          const statName = stat === 'hp' ? 'HP' : 
+                                           stat === 'attack' ? '攻击' : 
+                                           stat === 'defense' ? '防御' : 
+                                           stat === 'special-attack' ? '特攻' : 
+                                           stat === 'special-defense' ? '特防' : '速度';
+                          
+                          return (
+                            <div key={stat} className="flex flex-col gap-1">
+                              <div className="flex justify-between items-center text-[11px] font-black italic text-white/80 uppercase">
+                                <span>{statName}</span>
+                                <span>{val}</span>
+                              </div>
+                              <div className="h-1.5 bg-white/10 rounded-full overflow-hidden border border-white/5">
+                                <motion.div 
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${percentage}%` }}
+                                  className={`h-full rounded-full ${stat === 'hp' ? 'bg-pink-500' : 'bg-yellow-400'}`}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-xl text-center">
+                        <div className="text-[8px] font-black text-white/40 uppercase mb-1">性格</div>
+                        <div className="text-xs font-black italic text-white">{getLocalizedNature(rewardPokemonOptions[infoPokemonIdx].nature)}</div>
+                      </div>
+                    </motion.div>
+
+                    {/* Center: Sprite */}
+                    <div className="col-span-6 flex flex-col items-center justify-center relative">
+                      <motion.div
+                        key={`reward-sprite-${infoPokemonIdx}`}
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="relative"
+                      >
+                        <div className="absolute inset-0 bg-white/10 blur-3xl rounded-full scale-150" />
+                        <img 
+                          src={rewardPokemonOptions[infoPokemonIdx].sprites.front_default} 
+                          className="w-80 h-80 object-contain relative z-10 drop-shadow-[0_20px_50px_rgba(0,0,0,0.3)] pixelated"
+                          referrerPolicy="no-referrer"
+                        />
+                      </motion.div>
+                      
+                      <button
+                        onClick={() => infoPokemonIdx !== null && confirmRewardPokemon(rewardPokemonOptions[infoPokemonIdx])}
+                        className="mt-8 px-16 py-5 bg-yellow-400 text-slate-900 font-black italic text-2xl skew-x-[-12deg] shadow-[12px_12px_0px_rgba(0,0,0,0.3)] hover:bg-yellow-500 hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all border-2 border-white/20"
+                      >
+                        <span className="skew-x-[12deg] inline-block uppercase">{t('confirmSelection')}</span>
+                      </button>
+                    </div>
+
+                    {/* Right Panel: Moves */}
+                    <motion.div 
+                      key={`reward-moves-${infoPokemonIdx}`}
+                      initial={{ x: 50, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      className="col-span-3"
+                    >
+                      <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-[2rem] shadow-2xl">
+                        <div className="text-[10px] font-black italic text-white/40 uppercase mb-4 tracking-widest border-b border-white/10 pb-2">招式</div>
+                        <div className="space-y-3">
+                          {rewardPokemonOptions[infoPokemonIdx].selectedMoves.slice(0, 4).map((m, mi) => (
+                            <div key={mi} className="flex items-center gap-3 bg-white/5 p-3 rounded-xl border border-white/5">
+                              <TypeBadge type={m.type} size="sm" />
+                              <div className="flex-1">
+                                <div className="text-sm font-black italic text-white">{getLocalized(m)}</div>
+                                <div className="text-[9px] font-black text-white/40 uppercase">PP {m.pp}/{m.pp}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom: Icon List */}
+              <div className="p-8 pb-12 bg-black/40 backdrop-blur-md border-t border-white/10 flex justify-center gap-8 relative z-20">
+                {rewardPokemonOptions.map((p, idx) => {
+                  const isCurrent = infoPokemonIdx === idx;
+                  return (
+                    <div 
+                      key={idx} 
+                      className="relative group cursor-pointer" 
+                      onClick={() => setInfoPokemonIdx(idx)}
+                    >
+                      {isCurrent && (
+                        <motion.div 
+                          layoutId="reward-active-indicator"
+                          className="absolute -top-8 left-1/2 -translate-x-1/2 text-yellow-400"
+                        >
+                          <ChevronRight className="w-8 h-8 rotate-90 fill-current" />
+                        </motion.div>
+                      )}
+                      <div className={`w-24 h-24 rounded-2xl border-4 transition-all overflow-hidden relative ${
+                        isCurrent ? 'border-yellow-400 bg-white/30 scale-110 shadow-2xl' : 'border-white/10 bg-white/5 hover:bg-white/10'
+                      }`}>
+                        <img 
+                          src={p.sprites.front_default} 
+                          className={`w-full h-full object-contain pixelated transition-transform ${isCurrent ? 'scale-125' : 'group-hover:scale-110'}`} 
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </motion.div>
           )}
+        </AnimatePresence>
         {/* 对战历史悬浮窗 */}
         <AnimatePresence>
           {showLogHistory && gameState === 'BATTLE' && (
@@ -3079,16 +3411,29 @@ export default function App() {
                 <div className="absolute inset-0 bg-gradient-to-b from-blue-900/20 to-transparent"></div>
                 <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-blue-100 to-transparent"></div>
                 
-                {/* 环境层 */}
-                <div className="absolute top-4 left-4 z-30 flex flex-col gap-2">
+                {/* 顶部退出按钮 */}
+                <div className="absolute top-4 left-4 z-50">
+                  <button 
+                    onClick={() => setGameState('GAMEOVER')}
+                    className="bg-slate-900/60 hover:bg-slate-900/80 text-white p-2 rounded-lg border border-white/20 backdrop-blur-sm flex items-center gap-2 transition-all group"
+                  >
+                    <div className="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded border border-white/20">
+                      <ArrowLeft className="w-3 h-3 group-hover:-translate-x-1 transition-transform" />
+                      <div className="w-2 h-2 rounded-full bg-white/40"></div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* 环境状态 (Top Center) */}
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-1">
                   {weather !== 'none' && (
-                    <div className="bg-slate-900/80 text-white px-3 py-1 text-[10px] font-black italic uppercase flex items-center gap-2 border-l-4 border-blue-500">
-                      <CloudRain className="w-3 h-3" /> {t(`weather_${weather}`)} ({weatherTurns})
+                    <div className="bg-slate-900/80 text-white px-3 py-1 text-[10px] font-black italic uppercase flex items-center gap-2 border-l-4 border-yellow-500">
+                      <Zap className="w-3 h-3" /> {t(`weather_${weather}`)} ({weatherTurns})
                     </div>
                   )}
                   {terrain !== 'none' && (
-                    <div className="bg-slate-900/80 text-white px-3 py-1 text-[10px] font-black italic uppercase flex items-center gap-2 border-l-4 border-emerald-500">
-                      <Zap className="w-3 h-3" /> {t(`terrain_${terrain}`)} ({terrainTurns})
+                    <div className="bg-slate-900/80 text-white px-3 py-1 text-[10px] font-black italic uppercase flex items-center gap-2 border-l-4 border-green-500">
+                      <Leaf className="w-3 h-3" /> {t(`terrain_${terrain}`)} ({terrainTurns})
                     </div>
                   )}
                   {dimension !== 'none' && (
@@ -3099,41 +3444,73 @@ export default function App() {
                 </div>
 
                 {/* 敌人 HP Bar (Top Right) */}
-                <div className="absolute top-0 right-0 z-30">
+                <div className="absolute top-4 right-4 z-30">
                   <motion.div 
                     initial={{ x: 100, opacity: 0 }}
                     animate={{ x: 0, opacity: 1 }}
-                    className="bg-white p-2 sm:p-3 shadow-xl border-b-4 border-slate-900 w-48 sm:w-64 relative"
-                    style={{ clipPath: 'polygon(15% 0, 100% 0, 100% 100%, 0 100%)' }}
+                    className="relative"
                   >
-                    <div className="pl-8">
-                      <div className="flex justify-between items-center mb-1">
-                        <div className="flex items-center gap-1">
-                          <span className="font-black text-xs sm:text-sm italic uppercase text-slate-900 tracking-tighter">{getLocalized(enemy)}</span>
-                          {enemy.gender === 'male' && <Mars className="w-3 h-3 text-blue-500" />}
-                          {enemy.gender === 'female' && <Venus className="w-3 h-3 text-pink-500" />}
+                    {/* 背景斜切容器 */}
+                    <div 
+                      className="bg-gradient-to-b from-indigo-900 to-slate-900 p-1.5 shadow-[0_4px_20px_rgba(0,0,0,0.4)] border border-white/10 w-56 sm:w-72"
+                      style={{ clipPath: 'polygon(10% 0, 100% 0, 100% 100%, 0 100%)' }}
+                    >
+                      <div className="flex items-center gap-2 pl-6 pr-2">
+                        {/* 敌人头像框 */}
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-800 rounded-lg border border-white/20 flex items-center justify-center overflow-hidden flex-none">
+                          <img src={enemy.sprites.front_default} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                         </div>
-                        <span className="text-[10px] sm:text-xs font-black italic text-slate-500">等级 {enemy.level}</span>
+                        
+                        <div className="flex-1">
+                          <div className="flex justify-between items-center mb-0.5">
+                            <div className="flex items-center gap-1">
+                              <span className="font-black text-xs sm:text-sm italic text-white tracking-tighter uppercase">{getLocalized(enemy)}</span>
+                              {enemy.gender === 'male' && <Mars className="w-3 h-3 text-blue-400" />}
+                              {enemy.gender === 'female' && <Venus className="w-3 h-3 text-pink-400" />}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {enemy.status && (
+                                <span className="bg-white text-slate-900 text-[8px] px-1 font-black uppercase rounded">
+                                  {AILMENT_ZH[enemy.status] || enemy.status}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* HP 条 */}
+                          <div className="relative h-3 sm:h-4 bg-slate-800 rounded-sm border border-black/40 overflow-hidden skew-x-[-15deg]">
+                            <motion.div 
+                              animate={{ width: `${(enemy.currentHp / enemy.maxHp) * 100}%` }}
+                              className={`h-full transition-colors shadow-[inset_0_1px_2px_rgba(255,255,255,0.3)] ${enemy.currentHp / enemy.maxHp < 0.2 ? 'bg-red-500' : enemy.currentHp / enemy.maxHp < 0.5 ? 'bg-yellow-500' : 'bg-emerald-400'}`}
+                            />
+                            <div className="absolute inset-0 flex items-center justify-end pr-2">
+                              <span className="text-[10px] font-black italic text-white drop-shadow-md skew-x-[15deg]">
+                                {Math.round((enemy.currentHp / enemy.maxHp) * 100)}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="h-1.5 sm:h-2 bg-slate-200 rounded-full relative overflow-hidden border border-slate-300">
-                        <motion.div 
-                          animate={{ width: `${(enemy.currentHp / enemy.maxHp) * 100}%` }}
-                          className={`h-full transition-colors ${enemy.currentHp / enemy.maxHp < 0.2 ? 'bg-red-500' : enemy.currentHp / enemy.maxHp < 0.5 ? 'bg-yellow-500' : 'bg-emerald-500'}`}
-                        />
+                    </div>
+                    
+                    {/* 底部装饰图标 */}
+                    <div className="flex items-center gap-1 mt-1 pl-10">
+                      <div className="flex items-center gap-1 text-white/60 text-[10px] font-bold italic">
+                        <RefreshCw className="w-3 h-3" /> 06: 59
                       </div>
-                      <div className="flex justify-end mt-1">
-                        {enemy.status && (
-                          <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 font-black uppercase">
-                            {AILMENT_ZH[enemy.status] || enemy.status}
-                          </span>
-                        )}
+                      <div className="flex gap-0.5 ml-2">
+                        {[1, 2, 3].map(i => (
+                          <div key={i} className="w-3 h-3 rounded-full border border-green-400 flex items-center justify-center">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-400 shadow-[0_0_5px_#4ade80]"></div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </motion.div>
                 </div>
 
-                {/* 敌人 Sprite (Below HP Bar - No overlap) */}
-                <div className="absolute top-[42px] right-[5%] sm:right-[10%]">
+                {/* 敌人 Sprite */}
+                <div className="absolute top-[100px] right-[10%] sm:right-[15%]">
                   <motion.div
                     animate={isCatching ? { scale: 0, opacity: 0 } : enemyAnim === 'attack' ? { x: -60, y: 30, scale: 1, opacity: 1 } : enemyAnim === 'hit' ? { x: [0, 10, -10, 10, 0], opacity: [1, 0.5, 1], scale: 1 } : { y: [0, -10, 0], scale: 1, opacity: 1 }}
                     transition={isCatching ? { duration: 0.5 } : enemyAnim === 'idle' ? { y: { repeat: Infinity, duration: 3, ease: "easeInOut" }, scale: { duration: 0.3 }, opacity: { duration: 0.3 } } : { duration: 0.3 }}
@@ -3141,78 +3518,104 @@ export default function App() {
                   >
                     <img 
                       src={enemy.sprites.front_default} 
-                      className="w-32 h-32 sm:w-64 sm:h-64 object-contain object-top drop-shadow-2xl relative z-10"
+                      className="w-40 h-40 sm:w-72 sm:h-72 object-contain drop-shadow-2xl relative z-10"
                       referrerPolicy="no-referrer"
                     />
-                    {/* 对战平台 */}
-                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-[120%] h-8 bg-slate-900/10 rounded-[100%] blur-md -z-10"></div>
+                    <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-[120%] h-10 bg-black/20 rounded-[100%] blur-xl -z-10"></div>
                   </motion.div>
                 </div>
 
-                {/* 玩家状态与 Sprite 组合 (Bottom Left - Tightly packed) */}
-                <div className="absolute bottom-0 left-0 z-30 flex flex-col-reverse items-start">
+                {/* 玩家 HP Bar (Bottom Left) */}
+                <div className="absolute bottom-6 left-6 z-30 flex flex-col items-start gap-2">
+                  <motion.div 
+                    initial={{ x: -100, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    className="relative"
+                  >
+                    {/* 顶部装饰图标 */}
+                    <div className="flex items-center gap-1 mb-1 pl-2">
+                      <div className="flex gap-0.5">
+                        {[1, 2, 3].map(i => (
+                          <div key={i} className="w-3 h-3 rounded-full border border-green-400 flex items-center justify-center">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-400 shadow-[0_0_5px_#4ade80]"></div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-1 text-white/60 text-[10px] font-bold italic ml-2">
+                        <RefreshCw className="w-3 h-3" /> 06: 56
+                      </div>
+                    </div>
+
+                    {/* 背景斜切容器 */}
+                    <div 
+                      className="bg-gradient-to-b from-indigo-900 to-slate-900 p-1.5 shadow-[0_4px_20px_rgba(0,0,0,0.4)] border border-white/10 w-64 sm:w-80"
+                      style={{ clipPath: 'polygon(0 0, 90% 0, 100% 100%, 0 100%)' }}
+                    >
+                      <div className="flex items-center gap-2 pr-6 pl-2">
+                        {/* 玩家头像框 */}
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-slate-800 rounded-lg border border-white/20 flex items-center justify-center overflow-hidden flex-none">
+                          <img src={playerTeam[0].sprites.front_default} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                        </div>
+                        
+                        <div className="flex-1">
+                          <div className="flex justify-between items-center mb-0.5">
+                            <div className="flex items-center gap-1">
+                              <span className="font-black text-xs sm:text-sm italic text-white tracking-tighter uppercase">{getLocalized(playerTeam[0])}</span>
+                              {playerTeam[0].gender === 'male' && <Mars className="w-3 h-3 text-blue-400" />}
+                              {playerTeam[0].gender === 'female' && <Venus className="w-3 h-3 text-pink-400" />}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {playerTeam[0].status && (
+                                <span className="bg-white text-slate-900 text-[8px] px-1 font-black uppercase rounded">
+                                  {AILMENT_ZH[playerTeam[0].status] || playerTeam[0].status}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* HP 条 */}
+                          <div className="relative h-4 sm:h-5 bg-slate-800 rounded-sm border border-black/40 overflow-hidden skew-x-[-15deg]">
+                            <motion.div 
+                              animate={{ width: `${(playerTeam[0].currentHp / playerTeam[0].maxHp) * 100}%` }}
+                              className={`h-full transition-colors shadow-[inset_0_1px_2px_rgba(255,255,255,0.3)] ${playerTeam[0].currentHp / playerTeam[0].maxHp < 0.2 ? 'bg-red-500' : playerTeam[0].currentHp / playerTeam[0].maxHp < 0.5 ? 'bg-yellow-500' : 'bg-emerald-400'}`}
+                            />
+                          </div>
+                          <div className="flex justify-end mt-0.5">
+                            <span className="text-xs sm:text-sm font-black italic text-white drop-shadow-md">
+                              {playerTeam[0].currentHp} <span className="text-white/60 text-[10px]">/ {playerTeam[0].maxHp}</span>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+
                   {/* 玩家 Sprite */}
                   <motion.div
                     animate={playerAnim === 'attack' ? { x: 60, y: -40 } : playerAnim === 'hit' ? { x: [0, -10, 10, -10, 0], opacity: [1, 0.5, 1] } : { y: [0, 10, 0] }}
                     transition={playerAnim === 'idle' ? { y: { repeat: Infinity, duration: 3, ease: "easeInOut" } } : { duration: 0.3 }}
-                    className="relative"
+                    className="relative ml-4"
                   >
                     <img 
                       src={playerTeam[0].sprites.back_default || playerTeam[0].sprites.front_default} 
-                      className="w-48 h-48 sm:w-80 sm:h-80 object-contain object-left drop-shadow-2xl opacity-95 relative z-10"
+                      className="w-56 h-56 sm:w-96 sm:h-96 object-contain drop-shadow-2xl opacity-95 relative z-10"
                       referrerPolicy="no-referrer"
                     />
-                    {/* 对战平台 */}
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[110%] h-12 bg-slate-900/10 rounded-[100%] blur-md -z-10"></div>
-                  </motion.div>
-
-                  {/* 玩家 HP Bar */}
-                  <motion.div 
-                    initial={{ x: -100, opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    className="bg-white p-2 sm:p-3 shadow-xl border-b-4 border-slate-900 w-60 sm:w-80 relative"
-                    style={{ clipPath: 'polygon(0 0, 85% 0, 100% 100%, 0 100%)' }}
-                  >
-                    <div className="pr-8">
-                      <div className="flex justify-between items-center mb-1">
-                        <div className="flex items-center gap-1">
-                          <span className="font-black text-xs sm:text-sm italic uppercase text-slate-900 tracking-tighter">{getLocalized(playerTeam[0])}</span>
-                          {playerTeam[0].gender === 'male' && <Mars className="w-3 h-3 text-blue-500" />}
-                          {playerTeam[0].gender === 'female' && <Venus className="w-3 h-3 text-pink-500" />}
-                        </div>
-                        <span className="text-[10px] sm:text-xs font-black italic text-slate-500">等级 {playerTeam[0].level}</span>
-                      </div>
-                      <div className="h-1.5 sm:h-2 bg-slate-200 rounded-full relative overflow-hidden border border-slate-300">
-                        <motion.div 
-                          animate={{ width: `${(playerTeam[0].currentHp / playerTeam[0].maxHp) * 100}%` }}
-                          className={`h-full transition-colors ${playerTeam[0].currentHp / playerTeam[0].maxHp < 0.2 ? 'bg-red-500' : playerTeam[0].currentHp / playerTeam[0].maxHp < 0.5 ? 'bg-yellow-500' : 'bg-blue-500'}`}
-                        />
-                      </div>
-                      <div className="flex justify-between items-center mt-1">
-                        {playerTeam[0].status ? (
-                          <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 font-black uppercase">
-                            {AILMENT_ZH[playerTeam[0].status] || playerTeam[0].status}
-                          </span>
-                        ) : <div></div>}
-                        <span className="text-[10px] sm:text-xs font-black italic text-slate-900">
-                          {playerTeam[0].currentHp}/{playerTeam[0].maxHp}
-                        </span>
-                      </div>
-                    </div>
+                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[110%] h-14 bg-black/20 rounded-[100%] blur-xl -z-10"></div>
                   </motion.div>
                 </div>
 
-                {/* 剑盾风格操作菜单 (右下角) */}
+                {/* 剑盾风格操作菜单 (右侧) */}
                 <AnimatePresence>
                   {turn === 'PLAYER' && !isMessageProcessing && (
                     <motion.div 
-                      initial={{ y: 50, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: 50, opacity: 0 }}
-                      className="absolute right-2 bottom-2 z-50 flex flex-col items-end gap-2"
+                      initial={{ x: 100, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      exit={{ x: 100, opacity: 0 }}
+                      className="absolute right-6 bottom-6 z-50 flex flex-col items-end gap-4"
                     >
                       {battleMenuTab === 'MAIN' && (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col gap-3">
                           {[
                             { id: 'FIGHT', label: t('battle'), icon: Sword, color: 'bg-red-500' },
                             { id: 'POKEMON', label: t('pokemon'), icon: Dna, color: 'bg-emerald-500' },
@@ -3236,11 +3639,11 @@ export default function App() {
                               }}
                               className="group relative"
                             >
-                              <div className={`flex items-center gap-2 bg-white border-2 border-slate-200 rounded-lg pl-3 pr-1 py-1 shadow-xl hover:border-slate-900 transition-all w-28 sm:w-36 h-10 sm:h-14 skew-x-[-6deg]`}>
-                                <span className="flex-1 text-left font-black text-[10px] sm:text-sm italic text-slate-900 uppercase tracking-tighter skew-x-[6deg]">{btn.label}</span>
-                                <div className={`${btn.color} p-1 rounded shadow-inner skew-x-[6deg]`}>
-                                  <btn.icon className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
+                              <div className={`flex items-center gap-3 bg-slate-900/80 hover:bg-slate-900 border-2 border-white/20 rounded-lg px-6 py-3 shadow-2xl transition-all w-40 sm:w-56 skew-x-[-12deg] backdrop-blur-sm`}>
+                                <div className={`${btn.color} p-1.5 rounded-full shadow-lg skew-x-[12deg]`}>
+                                  <btn.icon className="w-4 h-4 text-white" />
                                 </div>
+                                <span className="flex-1 text-left font-black text-sm sm:text-lg italic text-white uppercase tracking-tighter skew-x-[12deg]">{btn.label}</span>
                               </div>
                             </button>
                           ))}
@@ -3248,37 +3651,72 @@ export default function App() {
                       )}
 
                       {battleMenuTab === 'MOVES' && (
-                        <div className="flex flex-col items-end gap-1">
-                          <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-full text-[8px] font-black italic uppercase border border-slate-200 flex items-center gap-1 mb-1 w-fit">
-                            <Zap className="w-2 h-2 text-yellow-500" /> {t('selectMove')}
-                          </div>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {playerTeam[0].selectedMoves.map((move, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => handleAttack(move)}
-                                className="group relative"
-                              >
-                                <div className={`flex items-center gap-2 bg-white border-2 border-slate-200 rounded-lg pl-3 pr-1 py-1 shadow-xl hover:border-slate-900 transition-all w-36 sm:w-48 h-12 sm:h-16 skew-x-[-6deg]`}>
-                                  <div className="flex-1 text-left skew-x-[6deg]">
-                                    <div className="font-black text-[10px] sm:text-xs italic text-slate-900 uppercase tracking-tighter leading-none truncate max-w-[80px] sm:max-w-[120px]">{getLocalized(move)}</div>
-                                    <div className="text-[7px] sm:text-[8px] font-bold text-slate-400 uppercase mt-0.5">{TYPE_ZH[move.type] || move.type} / {t('pp')} {move.currentPP}/{move.maxPP}</div>
-                                  </div>
-                                  <div className="bg-slate-900 p-1.5 rounded shadow-inner skew-x-[6deg]">
-                                    {(() => {
-                                      const Icon = TYPE_ICONS[move.type] || Sparkles;
-                                      return <Icon className="w-3 h-3 sm:w-4 sm:h-4" style={{ color: TYPE_COLORS[move.type] }} />;
-                                    })()}
-                                  </div>
-                                </div>
+                        <div className="flex flex-col items-end gap-4">
+                          {/* Command Menu */}
+                          <div className="flex flex-col items-end gap-1 mr-4">
+                            <div className="text-white/60 text-[10px] font-black italic uppercase tracking-widest mb-1">COMMAND <span className="text-white ml-1">41</span></div>
+                            <div className="flex gap-2">
+                              <button className="bg-indigo-900/80 border border-white/20 px-4 py-1 rounded skew-x-[-10deg] flex items-center gap-2 hover:bg-indigo-800 transition-colors">
+                                <span className="bg-white text-indigo-900 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold skew-x-[10deg]">X</span>
+                                <span className="text-white text-xs font-bold skew-x-[10deg]">查看状态</span>
                               </button>
-                            ))}
+                              <button className="bg-indigo-900/80 border border-white/20 px-4 py-1 rounded skew-x-[-10deg] flex items-center gap-2 hover:bg-indigo-800 transition-colors">
+                                <span className="bg-white text-indigo-900 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold skew-x-[10deg]">Y</span>
+                                <span className="text-white text-xs font-bold skew-x-[10deg]">招式说明</span>
+                              </button>
+                            </div>
                           </div>
+
+                          {/* Move List */}
+                          <div className="flex flex-col gap-2">
+                            {playerTeam[0].selectedMoves.map((move, idx) => {
+                              const effectiveness = getEffectivenessText(move.type, enemy);
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() => handleAttack(move)}
+                                  className="group relative"
+                                >
+                                  <div className={`flex items-center gap-3 bg-gradient-to-r ${TYPE_GRADIENTS[move.type] || 'from-slate-500 to-slate-700'} border-2 border-white/40 rounded-xl pl-4 pr-2 py-2 shadow-2xl hover:scale-105 transition-all w-64 sm:w-80 h-16 sm:h-20 skew-x-[-12deg] relative overflow-hidden`}>
+                                    {/* 纹理背景 */}
+                                    <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #000 1px, transparent 1px)', backgroundSize: '4px 4px' }}></div>
+                                    
+                                    <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm skew-x-[12deg] flex-none">
+                                      {(() => {
+                                        const Icon = TYPE_ICONS[move.type] || Sparkles;
+                                        return <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />;
+                                      })()}
+                                    </div>
+                                    
+                                    <div className="flex-1 text-left skew-x-[12deg]">
+                                      <div className="font-black text-sm sm:text-lg italic text-white uppercase tracking-tighter leading-tight drop-shadow-md">
+                                        {getLocalized(move)}
+                                      </div>
+                                      {effectiveness && (
+                                        <div className={`text-[10px] font-black italic flex items-center gap-1 ${effectiveness.color}`}>
+                                          <span>{effectiveness.icon}</span> {effectiveness.text}
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="flex flex-col items-end justify-center skew-x-[12deg] pr-2">
+                                      <div className="text-[14px] sm:text-[20px] font-black italic text-white leading-none">{move.currentPP}</div>
+                                      <div className="text-[10px] font-bold text-white/60">/ {move.maxPP}</div>
+                                    </div>
+
+                                    {/* 选中指示器 */}
+                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-white opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          
                           <button 
                             onClick={() => setBattleMenuTab('MAIN')}
-                            className="mt-1 bg-white/80 px-3 py-0.5 rounded-full text-[8px] font-black italic uppercase text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1 shadow-sm"
+                            className="mr-4 bg-white/20 hover:bg-white/40 px-6 py-1.5 rounded-full text-xs font-black italic uppercase text-white transition-all flex items-center gap-2 backdrop-blur-sm border border-white/20"
                           >
-                            <ArrowLeft className="w-2 h-2" /> {t('back')}
+                            <ArrowLeft className="w-3 h-3" /> {t('back')}
                           </button>
                         </div>
                       )}
@@ -3527,22 +3965,11 @@ export default function App() {
                             </>
                           ) : reward.type === 'POKEMON' ? (
                             <>
-                              <div className="relative mb-2 group-hover:scale-110 transition-transform">
-                                <img 
-                                  src={reward.data.sprites.front_default} 
-                                  alt={reward.data.name}
-                                  className="w-20 h-20 object-contain mx-auto relative z-10 drop-shadow-md"
-                                  referrerPolicy="no-referrer"
-                                />
+                              <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                <Sparkles className="w-8 h-8 text-blue-500" />
                               </div>
-                              <div className="flex flex-wrap items-center justify-center gap-2 mb-1">
-                                <h4 className="text-base font-black italic uppercase leading-tight text-center">{getLocalized(reward.data)}</h4>
-                                <div className="flex justify-center gap-1">
-                                  {reward.data.types.map((t: any) => (
-                                    <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
-                                  ))}
-                                </div>
-                              </div>
+                              <h4 className="text-base font-black italic mb-1 leading-tight text-center">{t('newPartner')}</h4>
+                              <p className="text-[10px] text-slate-400 font-bold line-clamp-2 text-center px-2">{t('newPartnerDesc')}</p>
                             </>
                           ) : (
                             <>
@@ -3881,37 +4308,46 @@ export default function App() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-[110] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6"
+                    className="fixed inset-0 z-[110] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-6"
                   >
-                    <div className="bg-white max-w-2xl w-full p-8 skew-x-[-2deg] shadow-2xl relative">
-                      <div className="skew-x-[2deg]">
-                        <h2 className="text-3xl font-black italic mb-2 tracking-tighter">{t('teamFull')}</h2>
-                        <p className="text-slate-500 mb-8 font-bold italic">{t('replacePartner')}：<span className="text-blue-600 uppercase">{getLocalized(showReplaceUI)}</span></p>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                          {playerTeam.map((p, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => replacePokemon(idx)}
-                              className="p-4 bg-slate-50 hover:bg-blue-50 border-2 border-slate-200 hover:border-blue-500 transition-all text-left flex items-center gap-4 group"
-                            >
-                              <img src={p.sprites.front_default} className="w-16 h-16 object-contain" referrerPolicy="no-referrer" />
+                    <motion.div 
+                      initial={{ scale: 0.9, y: 20 }}
+                      animate={{ scale: 1, y: 0 }}
+                      className="bg-white max-w-2xl w-full border-4 border-slate-900 shadow-[16px_16px_0px_rgba(0,0,0,0.2)] overflow-hidden relative"
+                    >
+                      <div className="bg-slate-900 p-6">
+                        <h2 className="text-2xl md:text-3xl font-black italic text-white tracking-tighter uppercase">{t('teamFull')}</h2>
+                        <p className="text-slate-400 font-bold italic mt-1">{t('replacePartner')}：<span className="text-lime-400 uppercase">{getLocalized(showReplaceUI)}</span></p>
+                      </div>
+                      
+                      <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {playerTeam.map((p, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => replacePokemon(idx)}
+                            className="relative h-20 group transition-all"
+                          >
+                            <div className="absolute inset-0 skew-x-[-6deg] border-2 border-slate-200 bg-slate-50 group-hover:border-blue-500 group-hover:bg-blue-50 transition-all" />
+                            <div className="relative z-10 flex items-center px-4 gap-4">
+                              <img src={p.sprites.front_default} className="w-14 h-14 object-contain pixelated" referrerPolicy="no-referrer" />
                               <div>
-                                <div className="font-black text-lg uppercase group-hover:text-blue-600">{getLocalized(p)}</div>
-                                <div className="text-xs font-bold text-slate-400">等级 {p.level}</div>
+                                <div className="font-black text-sm uppercase text-slate-900 group-hover:text-blue-600 italic">{getLocalized(p)}</div>
+                                <div className="text-[10px] font-black italic text-slate-400 uppercase">等级 {p.level}</div>
                               </div>
-                            </button>
-                          ))}
-                        </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
 
+                      <div className="p-6 pt-0">
                         <button 
                           onClick={() => setShowReplaceUI(null)}
-                          className="mt-8 w-full py-4 bg-slate-200 text-slate-600 font-black italic hover:bg-slate-300 transition-all"
+                          className="w-full py-4 bg-slate-100 text-slate-500 font-black italic uppercase tracking-widest hover:bg-slate-200 transition-all skew-x-[-6deg]"
                         >
-                          {t('cancelReplace')}
+                          <span className="skew-x-[6deg] inline-block">{t('cancelReplace')}</span>
                         </button>
                       </div>
-                    </div>
+                    </motion.div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -3921,42 +4357,55 @@ export default function App() {
           {gameState === 'BAG' && (
             <motion.div 
               key="bag-full"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed inset-0 z-[80] bg-slate-900/40 backdrop-blur-md p-4 md:p-8 flex flex-col"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[80] bg-slate-100 flex flex-col"
             >
-              <div className="w-full max-w-5xl mx-auto flex-1 flex flex-col bg-white rounded-3xl shadow-2xl overflow-hidden border-4 border-slate-900">
-                <div className="p-4 md:p-6 bg-slate-900 text-white flex justify-between items-center">
-                  <h2 className="text-xl md:text-3xl font-black italic uppercase tracking-tighter flex items-center gap-3">
-                    <Package className="w-6 h-6 md:w-8 md:h-8 text-yellow-400" /> {t('bag')}
-                  </h2>
-                  <button 
-                    onClick={() => setGameState(prevGameState || 'BATTLE')}
-                    className="p-2 bg-white/10 text-white hover:bg-white/20 transition-all rounded-full"
-                  >
-                    <ArrowLeft className="w-6 h-6" />
-                  </button>
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Header */}
+                <div className="flex justify-between items-center p-4 md:p-6 bg-white border-b border-slate-200 relative z-20">
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={() => setGameState(prevGameState || 'BATTLE')}
+                      className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all rounded-full"
+                    >
+                      <ArrowLeft className="w-6 h-6" />
+                    </button>
+                    <h2 className="text-2xl font-black italic tracking-tighter text-slate-900 uppercase flex items-center gap-3">
+                      <Package className="w-6 h-6 text-blue-600" /> {t('bag')}
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="bg-slate-900 text-white px-4 py-1 skew-x-[-10deg] text-sm font-black italic">
+                      <span className="skew-x-[10deg] inline-block">ITEMS: {inventory.length}</span>
+                    </div>
+                  </div>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto">
                     {inventory.length > 0 ? inventory.map((item, idx) => (
                       <button
                         key={idx}
                         onClick={() => useItem(item, idx)}
-                        className="p-4 bg-slate-50 hover:bg-slate-100 border-2 border-slate-200 rounded-xl transition-all text-left group relative overflow-hidden"
+                        className="relative h-24 group transition-all"
                       >
-                        <div className="absolute top-0 right-0 w-12 h-full bg-yellow-400/10 skew-x-[-20deg] translate-x-6 group-hover:translate-x-3 transition-transform"></div>
-                        <div className="relative z-10">
-                          <div className="font-black text-lg group-hover:text-blue-600 italic uppercase tracking-tighter">{getLocalized(item)}</div>
-                          <div className="text-xs text-slate-500 mt-1 font-bold leading-relaxed">{getLocalizedDesc(item)}</div>
+                        <div className="absolute inset-0 skew-x-[-6deg] border-2 border-slate-200 bg-white group-hover:border-blue-500 group-hover:bg-blue-50 transition-all shadow-sm" />
+                        <div className="relative z-10 flex items-center px-4 gap-4 h-full">
+                          <div className="w-12 h-12 bg-slate-50 rounded-lg flex items-center justify-center border border-slate-100 group-hover:bg-white transition-colors">
+                            <Package className="w-6 h-6 text-slate-400 group-hover:text-blue-500" />
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <div className="font-black text-sm uppercase text-slate-900 group-hover:text-blue-600 italic truncate">{getLocalized(item)}</div>
+                            <div className="text-[10px] text-slate-500 mt-1 font-bold leading-tight line-clamp-2 italic">{getLocalizedDesc(item)}</div>
+                          </div>
                         </div>
                       </button>
                     )) : (
                       <div className="col-span-full py-20 text-center flex flex-col items-center gap-4">
                         <Package className="w-16 h-16 text-slate-200" />
-                        <div className="text-slate-300 font-black italic text-2xl uppercase tracking-widest">背包空空如也</div>
+                        <div className="text-slate-300 font-black italic text-2xl uppercase tracking-widest">{t('bagEmpty')}</div>
                       </div>
                     )}
                   </div>
@@ -3968,10 +4417,10 @@ export default function App() {
           {gameState === 'POKEMON_INFO' && (
             <motion.div 
               key="pokemon_info"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="flex-1 flex flex-col overflow-hidden relative"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex-1 flex flex-col overflow-hidden relative bg-slate-100"
             >
               {(() => {
                 const infoSource = prevGameState === 'STARTER_SELECT' ? starterOptions : playerTeam;
@@ -3980,221 +4429,245 @@ export default function App() {
                 const ability = p?.abilities?.[0]?.ability;
 
                 return (
-                  <div className="absolute inset-0 z-[150] bg-slate-50 flex flex-col p-4 md:p-6 overflow-hidden">
-                    {/* Background Stripes */}
-                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none overflow-hidden">
-                      <div className="absolute inset-0 rotate-12 scale-150 flex flex-col gap-4">
-                        {Array.from({ length: 20 }).map((_, i) => (
-                          <div key={i} className="h-12 bg-slate-900 w-full" />
-                        ))}
-                      </div>
-                    </div>
-
+                  <div className="absolute inset-0 z-[150] flex flex-col overflow-hidden">
                     {/* Header */}
-                    <div className="flex justify-between items-center mb-4 flex-none relative z-10">
-                      <div className="bg-blue-600 px-6 py-2 skew-x-[-12deg] shadow-xl">
-                        <h2 className="text-xl md:text-2xl font-black italic tracking-tighter skew-x-[12deg] text-white flex items-center gap-2">
-                          <Dna className="w-5 h-5" /> {prevGameState === 'STARTER_SELECT' ? t('chooseStarter') : t('myTeam')}
+                    <div className="flex justify-between items-center p-4 md:p-6 bg-white border-b border-slate-200 relative z-20">
+                      <div className="flex items-center gap-4">
+                        {!isFaintedReplacement && (
+                          <button 
+                            onClick={() => {
+                              setInfoPokemonIdx(null);
+                              setGameState(prevGameState || 'MENU');
+                            }}
+                            className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all rounded-full"
+                          >
+                            <ArrowLeft className="w-6 h-6" />
+                          </button>
+                        )}
+                        <h2 className="text-2xl font-black italic tracking-tighter text-slate-900 uppercase">
+                          {prevGameState === 'STARTER_SELECT' ? t('chooseStarter') : t('myTeam')}
                         </h2>
                       </div>
-                      {!isFaintedReplacement && (
-                        <button 
-                          onClick={() => {
-                            setInfoPokemonIdx(null);
-                            setGameState(prevGameState || 'MENU');
-                          }}
-                          className="p-2 bg-slate-900/10 text-slate-900 hover:bg-slate-900/20 transition-all rounded-full"
-                        >
-                          <ArrowLeft className="w-6 h-6" />
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <div className="bg-slate-900 text-white px-4 py-1 skew-x-[-10deg] text-sm font-black italic">
+                          <span className="skew-x-[10deg] inline-block">LV.{p?.level || 0}</span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex-1 flex flex-col md:flex-row gap-4 overflow-hidden relative z-10">
+                    <div className="flex-1 flex overflow-hidden p-4 md:p-6 gap-6">
                       {/* Left Column: Team List */}
-                      <div className="w-full md:w-72 flex flex-col gap-2 overflow-y-auto custom-scrollbar pr-2 pb-4 flex-none">
+                      <div className="w-full md:w-80 flex flex-col gap-3 overflow-y-auto custom-scrollbar pr-2 pb-4 flex-none">
                         {infoSource.map((tp, idx) => (
                           <button
                             key={idx}
-                            onClick={() => setInfoPokemonIdx(idx)}
+                            onClick={() => {
+                              setInfoPokemonIdx(idx);
+                              if (prevGameState === 'BATTLE') {
+                                setShowTeamActionMenu(idx);
+                              }
+                            }}
                             className={`
-                              p-3 transition-all border-l-4 flex items-center gap-3 text-left relative overflow-hidden rounded-r-xl
-                              ${currentIdx === idx 
-                                ? 'bg-blue-600 border-blue-400 shadow-lg scale-[1.02] z-10' 
-                                : 'bg-white border-slate-100 hover:border-blue-300 hover:bg-slate-50 shadow-sm'}
+                              group relative h-20 transition-all flex items-center
+                              ${currentIdx === idx ? 'scale-[1.02] z-10' : 'hover:scale-[1.01]'}
                             `}
                           >
-                            <div className="relative flex-none">
-                              <img 
-                                src={tp.sprites.front_default} 
-                                className={`w-12 h-12 relative z-10 ${tp.currentHp <= 0 ? 'grayscale opacity-50' : ''}`} 
-                                referrerPolicy="no-referrer" 
-                              />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className={`font-black italic text-sm uppercase truncate ${currentIdx === idx ? 'text-white' : 'text-slate-900'}`}>
-                                {getLocalized(tp)}
+                            {/* Slanted Background */}
+                            <div 
+                              className={`
+                                absolute inset-0 skew-x-[-10deg] transition-all border-2
+                                ${currentIdx === idx 
+                                  ? 'bg-white border-lime-400 shadow-[8px_8px_0px_rgba(163,230,53,0.2)]' 
+                                  : 'bg-white border-slate-200 group-hover:border-slate-300 shadow-sm'}
+                              `}
+                            />
+                            
+                            {/* Active Indicator */}
+                            {currentIdx === idx && (
+                              <div className="absolute left-[-10px] top-1/2 -translate-y-1/2 w-2 h-12 bg-lime-400 skew-x-[-10deg] z-20" />
+                            )}
+
+                            <div className="relative z-10 flex items-center w-full px-4 gap-3">
+                              <div className="relative flex-none">
+                                <img 
+                                  src={tp.sprites.front_default} 
+                                  className={`w-14 h-14 object-contain pixelated ${tp.currentHp <= 0 ? 'grayscale opacity-50' : ''}`} 
+                                  referrerPolicy="no-referrer" 
+                                />
                               </div>
-                              <div className="flex items-center gap-2 mt-1">
-                                <div className={`flex-1 h-1 rounded-full overflow-hidden ${currentIdx === idx ? 'bg-blue-800' : 'bg-slate-100'}`}>
-                                  <div 
-                                    className={`h-full transition-all ${tp.currentHp / tp.maxHp > 0.5 ? 'bg-green-400' : tp.currentHp / tp.maxHp > 0.2 ? 'bg-yellow-400' : 'bg-red-400'}`} 
-                                    style={{ width: `${(tp.currentHp / tp.maxHp) * 100}%` }}
-                                  />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="font-black italic text-sm uppercase truncate text-slate-900">
+                                    {getLocalized(tp)}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    {tp.gender === 'male' && <Mars className="w-3 h-3 text-blue-500" />}
+                                    {tp.gender === 'female' && <Venus className="w-3 h-3 text-pink-500" />}
+                                  </div>
                                 </div>
-                                <span className={`text-[10px] font-black italic ${currentIdx === idx ? 'text-blue-200' : 'text-slate-400'}`}>等级 {tp.level}</span>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                                    <div 
+                                      className={`h-full transition-all ${tp.currentHp / tp.maxHp > 0.5 ? 'bg-green-400' : tp.currentHp / tp.maxHp > 0.2 ? 'bg-yellow-400' : 'bg-red-400'}`} 
+                                      style={{ width: `${(tp.currentHp / tp.maxHp) * 100}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] font-black italic text-slate-500 whitespace-nowrap">
+                                    {tp.currentHp}/{tp.maxHp}
+                                  </span>
+                                </div>
                               </div>
                             </div>
+                            
                             {idx === 0 && prevGameState === 'BATTLE' && (
-                              <div className="absolute top-0 right-0 bg-yellow-400 text-slate-900 text-[8px] font-black px-2 py-0.5 rounded-bl-lg uppercase tracking-tighter">
-                                {t('active')}
+                              <div className="absolute top-[-4px] right-2 bg-slate-900 text-white text-[8px] font-black px-2 py-0.5 skew-x-[-10deg] z-20 uppercase tracking-tighter">
+                                <span className="skew-x-[10deg] inline-block">{t('active')}</span>
                               </div>
                             )}
                           </button>
                         ))}
                       </div>
 
-                      {/* Right Column: Details */}
-                      <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-2xl shadow-2xl relative border border-slate-100">
+                      {/* Center Panel: Details */}
+                      <div className="flex-1 flex flex-col bg-white border-2 border-slate-200 relative overflow-hidden">
                         {p ? (
-                          <div className="flex-1 flex flex-col overflow-hidden relative">
-                            {/* Background Stripes for Detail */}
-                            <div className="absolute inset-0 opacity-[0.02] pointer-events-none overflow-hidden">
-                              <div className="absolute inset-0 rotate-12 scale-150 flex flex-col gap-4">
-                                {Array.from({ length: 20 }).map((_, i) => (
-                                  <div key={i} className="h-8 bg-slate-900 w-full" />
-                                ))}
-                              </div>
+                          <div className="flex-1 flex flex-col overflow-hidden">
+                            {/* Tabs */}
+                            <div className="flex bg-slate-50 border-b-2 border-slate-200">
+                              <button 
+                                onClick={() => setInfoTab('STATS')}
+                                className={`
+                                  px-8 py-3 font-black italic uppercase text-sm tracking-widest transition-all relative
+                                  ${infoTab === 'STATS' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}
+                                `}
+                              >
+                                能力
+                                {infoTab === 'STATS' && <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-600" />}
+                              </button>
+                              <button 
+                                onClick={() => setInfoTab('STATUS')}
+                                className={`
+                                  px-8 py-3 font-black italic uppercase text-sm tracking-widest transition-all relative
+                                  ${infoTab === 'STATUS' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}
+                                `}
+                              >
+                                状态
+                                {infoTab === 'STATUS' && <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-600" />}
+                              </button>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 relative z-10">
-                              {/* Top Section: Image, Name, Stats Chart */}
-                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                                {/* Left: Basic Info */}
-                                <div className="flex flex-col items-center lg:items-start text-center lg:text-left">
-                                  <div className="relative mb-2">
-                                    <div className="absolute inset-0 bg-blue-50 rounded-full blur-2xl opacity-50" />
-                                    <img 
-                                      src={p.sprites.front_default} 
-                                      className="w-40 h-40 lg:w-56 lg:h-56 object-contain drop-shadow-2xl relative z-10" 
-                                      referrerPolicy="no-referrer" 
-                                    />
-                                  </div>
-                                  <h3 className="text-2xl lg:text-4xl font-black italic uppercase tracking-tighter text-slate-900 mb-1 flex items-center gap-2">
-                                    {getLocalized(p)}
-                                    {p.gender === 'male' && <Mars className="w-5 h-5 text-blue-500" />}
-                                    {p.gender === 'female' && <Venus className="w-5 h-5 text-pink-500" />}
-                                  </h3>
-                                  <div className="flex gap-2 mb-3">
-                                    {p.types.map(t => (
-                                      <TypeBadge key={t.type.name} type={t.type.name} size="sm" />
-                                    ))}
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 w-full max-w-xs">
-                                    <div className="flex flex-col">
-                                      <span className="text-[10px] font-black italic text-slate-400 uppercase">{t('nature')}</span>
-                                      <span className="font-black italic text-slate-700 text-sm">{getLocalizedNature(p.nature)}</span>
+                            <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                              {infoTab === 'STATS' ? (
+                                <div className="flex flex-col gap-8">
+                                  {/* Top: Image and Type */}
+                                  <div className="flex flex-col md:flex-row items-center gap-8">
+                                    <div className="w-48 h-48 bg-slate-50 rounded-full flex items-center justify-center border-4 border-white shadow-inner relative">
+                                      <img 
+                                        src={p.sprites.front_default} 
+                                        className="w-40 h-40 object-contain pixelated drop-shadow-xl z-10" 
+                                        referrerPolicy="no-referrer" 
+                                      />
+                                      <div className="absolute -bottom-2 flex gap-2">
+                                        {p.types.map(t => (
+                                          <TypeBadge key={t.type.name} type={t.type.name} size="sm" />
+                                        ))}
+                                      </div>
                                     </div>
-                                    <div className="flex flex-col">
-                                      <span className="text-[10px] font-black italic text-slate-400 uppercase">等级</span>
-                                      <span className="font-black italic text-slate-700 text-sm">{p.level}</span>
-                                    </div>
-                                    <div className="flex flex-col col-span-2 mt-2">
-                                      <span className="text-[10px] font-black italic text-slate-400 uppercase">{t('ability')}</span>
-                                      <span className="font-black italic text-blue-600 text-sm">{getLocalized(ability)}</span>
-                                      <p className="text-[10px] text-slate-500 italic mt-0.5 leading-tight">{getLocalizedDesc(ability)}</p>
+                                    
+                                    <div className="flex-1 grid grid-cols-2 gap-4">
+                                      {['hp', 'attack', 'defense', 'spAtk', 'spDef', 'speed'].map((key) => {
+                                        const isPlus = p.nature.plus === key;
+                                        const isMinus = p.nature.minus === key;
+                                        const val = p.calculatedStats[key as keyof Stats];
+                                        const baseVal = p.baseStats[key as keyof Stats];
+                                        const percent = (baseVal / 255) * 100;
+
+                                        return (
+                                          <div key={key} className="flex flex-col gap-1">
+                                            <div className="flex justify-between items-end">
+                                              <span className={`text-[10px] font-black italic uppercase ${isPlus ? 'text-red-500' : isMinus ? 'text-blue-500' : 'text-slate-400'}`}>
+                                                {t(key)} {isPlus && '↑'} {isMinus && '↓'}
+                                              </span>
+                                              <span className="text-lg font-black italic text-slate-900 leading-none">{val}</span>
+                                            </div>
+                                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                              <motion.div 
+                                                initial={{ width: 0 }}
+                                                animate={{ width: `${percent}%` }}
+                                                className={`h-full ${isPlus ? 'bg-red-400' : isMinus ? 'bg-blue-400' : 'bg-slate-400'}`}
+                                              />
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   </div>
 
-                                  {/* Action Buttons in Detail View */}
-                                  {prevGameState === 'BATTLE' && currentIdx !== null && (
-                                    <div className="mt-6 w-full max-w-xs">
-                                      <button
-                                        disabled={p.currentHp <= 0 || currentIdx === 0 || isMessageProcessing}
-                                        onClick={() => switchPokemon(currentIdx)}
-                                        className={`
-                                          w-full py-3 rounded-xl font-black italic uppercase tracking-widest skew-x-[-10deg] transition-all shadow-lg
-                                          ${p.currentHp <= 0 || currentIdx === 0 || isMessageProcessing
-                                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                            : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105 active:scale-95'}
-                                        `}
-                                      >
-                                        <span className="skew-x-[10deg] inline-block">
-                                          {isFaintedReplacement ? t('sentOut').replace('你派出了 ', '') : t('switch')}
-                                        </span>
-                                      </button>
-                                      {currentIdx === 0 && (
-                                        <p className="text-[10px] text-slate-400 italic mt-2 text-center">{t('currentlyInBattle')}</p>
-                                      )}
-                                      {p.currentHp <= 0 && (
-                                        <p className="text-[10px] text-red-400 italic mt-2 text-center">{t('pokemonFainted')}</p>
-                                      )}
+                                  {/* Moves Section */}
+                                  <div className="flex flex-col gap-4">
+                                    <h4 className="text-sm font-black italic uppercase text-slate-400 tracking-widest border-b border-slate-100 pb-2">技能列表</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      {p.selectedMoves.map((move, i) => (
+                                        <div 
+                                          key={i} 
+                                          className="relative h-14 flex items-center group"
+                                        >
+                                          <div 
+                                            className="absolute inset-0 skew-x-[-6deg] border-2 border-slate-200 bg-white group-hover:border-slate-300 transition-all"
+                                            style={{ borderLeftWidth: '8px', borderLeftColor: TYPE_COLORS[move.type.name] || '#ccc' }}
+                                          />
+                                          <div className="relative z-10 flex items-center justify-between w-full px-4">
+                                            <div className="flex flex-col">
+                                              <span className="font-black italic uppercase text-xs text-slate-900">{getLocalized(move)}</span>
+                                              <div className="flex items-center gap-2">
+                                                <TypeBadge type={move.type.name} size="xs" />
+                                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">{move.damage_class}</span>
+                                              </div>
+                                            </div>
+                                            <div className="text-right">
+                                              <div className="text-[8px] font-black italic text-slate-400 uppercase leading-none mb-0.5">PP</div>
+                                              <div className="text-xs font-black italic text-slate-700">{move.currentPP}/{move.pp}</div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
                                     </div>
-                                  )}
-                                </div>
-
-                                {/* Right: Radar Chart & Detailed Stats */}
-                                <div className="flex flex-col gap-4">
-                                  <div className="flex items-center justify-center bg-slate-50/50 rounded-2xl p-2">
-                                    <RadarChart stats={p.baseStats} t={t} calculatedStats={p.calculatedStats} />
-                                  </div>
-                                  
-                                  {/* Detailed Stats Table */}
-                                  <div className="bg-slate-50 rounded-xl p-3 overflow-hidden border border-slate-100">
-                                    <table className="w-full text-left border-collapse">
-                                      <thead>
-                                        <tr className="border-b border-slate-200">
-                                          <th className="py-1 text-[9px] font-black italic text-slate-400 uppercase">{t('stats')}</th>
-                                          <th className="py-1 text-[9px] font-black italic text-slate-400 uppercase text-center">{t('base')}</th>
-                                          <th className="py-1 text-[9px] font-black italic text-slate-400 uppercase text-right">{t('actualStats')}</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {['hp', 'attack', 'defense', 'spAtk', 'spDef', 'speed'].map((key) => {
-                                          const isPlus = p.nature.plus === key;
-                                          const isMinus = p.nature.minus === key;
-                                          return (
-                                            <tr key={key} className="border-b border-slate-100 last:border-0">
-                                              <td className="py-1.5 text-[11px] font-black italic text-slate-600 uppercase flex items-center gap-1">
-                                                {t(key)}
-                                                {isPlus && <span className="text-[9px] text-red-500 font-bold">↑</span>}
-                                                {isMinus && <span className="text-[9px] text-blue-500 font-bold">↓</span>}
-                                              </td>
-                                              <td className="py-1.5 text-[11px] font-bold text-slate-400 text-center">{p.baseStats[key as keyof Stats]}</td>
-                                              <td className="py-1.5 text-xs font-black italic text-slate-900 text-right">{p.calculatedStats[key as keyof Stats]}</td>
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
                                   </div>
                                 </div>
-                              </div>
-
-                              {/* Bottom Section: Moves */}
-                              <div className="mb-4">
-                                <div className="flex items-center gap-2 mb-3">
-                                  <Zap className="w-4 h-4 text-yellow-500" />
-                                  <h4 className="text-base font-black italic uppercase text-slate-900">{t('currentMoves')}</h4>
-                                </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  {p.selectedMoves.map((move, i) => (
-                                    <div key={i} className="bg-slate-50 p-3 border-l-4 border-blue-500 flex justify-between items-center rounded-r-lg">
-                                      <div>
-                                        <div className="font-black italic uppercase text-xs text-slate-900">{getLocalized(move)}</div>
-                                        <div className="flex gap-1 mt-1">
-                                          <TypeBadge type={move.type.name} size="xs" />
-                                          <span className="text-[9px] font-bold text-slate-400 uppercase">{move.damage_class}</span>
+                              ) : (
+                                <div className="flex flex-col gap-8">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="flex flex-col gap-2">
+                                      <span className="text-[10px] font-black italic text-slate-400 uppercase tracking-widest">特性</span>
+                                      <div className="bg-slate-50 p-4 border-2 border-slate-200 skew-x-[-4deg]">
+                                        <div className="skew-x-[4deg]">
+                                          <div className="font-black italic text-blue-600 text-sm mb-1 uppercase">{getLocalized(ability)}</div>
+                                          <p className="text-[11px] text-slate-500 italic leading-tight">{getLocalizedDesc(ability)}</p>
                                         </div>
                                       </div>
-                                      <div className="text-right">
-                                        <div className="text-[10px] font-black italic text-slate-400 uppercase">{t('pp')}</div>
-                                        <div className="text-xs font-black italic text-slate-700">{move.currentPP}/{move.pp}</div>
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                      <span className="text-[10px] font-black italic text-slate-400 uppercase tracking-widest">性格</span>
+                                      <div className="bg-slate-50 p-4 border-2 border-slate-200 skew-x-[-4deg]">
+                                        <div className="skew-x-[4deg]">
+                                          <div className="font-black italic text-slate-900 text-sm uppercase">{getLocalizedNature(p.nature)}</div>
+                                          <div className="flex gap-4 mt-1">
+                                            {p.nature.plus && <span className="text-[10px] font-bold text-red-500 uppercase">提升: {t(p.nature.plus)}</span>}
+                                            {p.nature.minus && <span className="text-[10px] font-bold text-blue-500 uppercase">降低: {t(p.nature.minus)}</span>}
+                                          </div>
+                                        </div>
                                       </div>
                                     </div>
-                                  ))}
+                                  </div>
+
+                                  <div className="flex flex-col gap-2">
+                                    <span className="text-[10px] font-black italic text-slate-400 uppercase tracking-widest">对战历史</span>
+                                    <div className="bg-slate-50 p-6 border-2 border-slate-200 min-h-[200px] flex items-center justify-center">
+                                      <p className="text-slate-300 font-black italic uppercase tracking-widest">尚无记录</p>
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
+                              )}
                             </div>
                           </div>
                         ) : (
@@ -4204,7 +4677,64 @@ export default function App() {
                           </div>
                         )}
                       </div>
+
+                      {/* Right Column: Decorative/Enemy List */}
+                      <div className="hidden lg:flex w-48 flex-col gap-3 opacity-30 pointer-events-none">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                          <div key={i} className="h-16 bg-slate-200 skew-x-[-10deg] border-2 border-slate-300" />
+                        ))}
+                      </div>
                     </div>
+
+                    {/* Team Action Menu Popup */}
+                    <AnimatePresence>
+                      {showTeamActionMenu !== null && (
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4"
+                          onClick={() => setShowTeamActionMenu(null)}
+                        >
+                          <motion.div 
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            className="bg-white w-full max-w-[280px] border-4 border-slate-900 shadow-[12px_12px_0px_rgba(0,0,0,0.2)] overflow-hidden"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <div className="bg-slate-900 p-4">
+                              <h3 className="text-white font-black italic uppercase tracking-widest text-center">
+                                {getLocalized(infoSource[showTeamActionMenu])}
+                              </h3>
+                            </div>
+                            <div className="p-2 flex flex-col gap-2">
+                              <button 
+                                disabled={infoSource[showTeamActionMenu].currentHp <= 0 || showTeamActionMenu === 0 || (isMessageProcessing && !isFaintedReplacement)}
+                                onClick={() => {
+                                  switchPokemon(showTeamActionMenu);
+                                  setShowTeamActionMenu(null);
+                                }}
+                                className={`
+                                  w-full py-4 font-black italic uppercase tracking-widest transition-all
+                                  ${infoSource[showTeamActionMenu].currentHp <= 0 || showTeamActionMenu === 0 || (isMessageProcessing && !isFaintedReplacement)
+                                    ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                                    : 'bg-white text-slate-900 hover:bg-lime-400 hover:text-white border-2 border-slate-900'}
+                                `}
+                              >
+                                {isFaintedReplacement ? '派它上场' : '替换'}
+                              </button>
+                              <button 
+                                onClick={() => setShowTeamActionMenu(null)}
+                                className="w-full py-4 bg-white text-slate-400 font-black italic uppercase tracking-widest hover:bg-slate-50 transition-all"
+                              >
+                                退出
+                              </button>
+                            </div>
+                          </motion.div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 );
               })()}
