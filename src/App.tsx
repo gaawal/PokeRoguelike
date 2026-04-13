@@ -42,7 +42,14 @@ import {
 } from 'lucide-react';
 import { getProcessedPokemon, getRandomPokemonId, getLearnableMoves, fetchEvolutionChain, fetchPokemon, fetchPokeBalls } from './services/pokeApi';
 import { GamePokemon, GameState, Item, Move, BattleMenuTab, SUPPORTED_LANGUAGES, Nature, StatStages, Weather, Terrain, Dimension, Pokemon, Stats } from './types';
-import { TYPE_CHART, TYPE_ZH, GENERATIONS } from './constants';
+import { TYPE_CHART, TYPE_ZH, GENERATIONS, STAT_STAGE_MODIFIERS, AILMENT_ZH, STAT_ZH } from './constants';
+import { calculateDamage, getTypeEffectiveness } from './lib/battleUtils';
+import { MoveEffectFactory } from './strategies/moveEffects/MoveEffectFactory';
+import { BattleContext } from './strategies/moveEffects/types';
+import { useI18n } from './hooks/useI18n';
+import { useBattle } from './hooks/useBattle';
+import { useRewards } from './hooks/useRewards';
+import { usePokemonManager } from './hooks/usePokemonManager';
 
 // 属性颜色映射
 const TYPE_COLORS: Record<string, string> = {
@@ -87,60 +94,10 @@ const TYPE_ICONS: Record<string, any> = {
   dark: Moon,
 };
 
-const AILMENT_ZH: Record<string, string> = {
-  poison: '中毒',
-  toxic: '剧毒',
-  paralysis: '麻痹',
-  burn: '灼伤',
-  freeze: '冰冻',
-  sleep: '睡眠',
-  confusion: '混乱',
-  infatuation: '着迷',
-  trap: '束缚',
-  nightmare: '噩梦',
-  leech_seed: '寄生种子',
-};
-
-const STAT_ZH: Record<string, string> = {
-  attack: '攻击',
-  defense: '防御',
-  spAtk: '特攻',
-  spDef: '特防',
-  speed: '速度',
-  accuracy: '命中',
-  evasion: '闪避',
-};
-
-const STAT_STAGE_MODIFIERS: Record<number, number> = {
-  '-6': 2 / 8,
-  '-5': 2 / 7,
-  '-4': 2 / 6,
-  '-3': 2 / 5,
-  '-2': 2 / 4,
-  '-1': 2 / 3,
-  '0': 1,
-  '1': 1.5,
-  '2': 2,
-  '3': 2.5,
-  '4': 3,
-  '5': 3.5,
-  '6': 4,
-};
-
-const ACC_EVA_STAGE_MODIFIERS: Record<number, number> = {
-  '-6': 3 / 9,
-  '-5': 3 / 8,
-  '-4': 3 / 7,
-  '-3': 3 / 6,
-  '-2': 3 / 5,
-  '-1': 3 / 4,
-  '0': 1,
-  '1': 4 / 3,
-  '2': 5 / 3,
-  '3': 6 / 3,
-  '4': 7 / 3,
-  '5': 8 / 3,
-  '6': 9 / 3,
+const CATEGORY_ICONS: Record<string, any> = {
+  physical: Sparkles,
+  special: Circle,
+  status: Shield,
 };
 
 const STRUGGLE_MOVE: Move = {
@@ -607,579 +564,73 @@ const RadarChart = ({ stats, t, calculatedStats }: {
 };
 
 export default function App() {
+  const {
+    currentLanguage,
+    setCurrentLanguage,
+    t,
+    getLocalized,
+    getLocalizedDesc,
+    getLocalizedNature,
+    getStatName
+  } = useI18n();
+
+  const {
+    enemy, setEnemy,
+    battleLog, setBattleLog, addLog, clearLog,
+    turn, setTurn,
+    battleMenuTab, setBattleMenuTab,
+    weather, setWeather, weatherTurns, setWeatherTurns,
+    terrain, setTerrain, terrainTurns, setTerrainTurns,
+    dimension, setDimension, dimensionTurns, setDimensionTurns,
+  } = useBattle();
+
+  const {
+    rewards, setRewards,
+    rewardChoiceMade, setRewardChoiceMade,
+    rerollCount, setRerollCount,
+    rewardPokemonOptions, setRewardPokemonOptions,
+    showRewardPokemonSelect, setShowRewardPokemonSelect,
+    shopItems, setShopItems,
+  } = useRewards();
+
+  const {
+    playerTeam, setPlayerTeam,
+    showReplaceUI, setShowReplaceUI,
+    learningPokemonIdx, setLearningPokemonIdx,
+    potentialMoves, setPotentialMoves,
+    selectedNewMove, setSelectedNewMove,
+    evolutionTarget, setEvolutionTarget,
+    isEvolving, setIsEvolving,
+    evolvedPokemon, setEvolvedPokemon,
+    evolutionChoices, setEvolutionChoices,
+    selectedPokemonForEvolution, setSelectedPokemonForEvolution,
+    canEvolveMap, setCanEvolveMap,
+    isCheckingEvolution, setIsCheckingEvolution,
+    isEvolutionAnimating, setIsEvolutionAnimating,
+    evolutionConfirmChoice, setEvolutionConfirmChoice,
+  } = usePokemonManager();
+
   const [gameState, setGameState] = useState<GameState>('START');
   const [startStep, setStartStep] = useState(0); // 0: Title, 1: Region, 2: Level
   const [coins, setCoins] = useState(0);
-  const [shopItems, setShopItems] = useState<{item: Item, price: number}[]>([]);
-  const [rewardChoiceMade, setRewardChoiceMade] = useState(false);
-  const [rerollCount, setRerollCount] = useState(0);
-  const [playerTeam, setPlayerTeam] = useState<GamePokemon[]>([]);
-  const [rewards, setRewards] = useState<{ type: 'ITEM' | 'POKEMON' | 'MOVE' | 'EVOLUTION' | 'SHOP_ITEM', data: any }[]>([]);
   const [activeBuffs, setActiveBuffs] = useState<{ atk: boolean, def: boolean }>({ atk: false, def: false });
   const [enemyBuffs, setEnemyBuffs] = useState<{ atk: boolean, def: boolean }>({ atk: false, def: false });
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isMessageProcessing, setIsMessageProcessing] = useState(false);
-  const [showReplaceUI, setShowReplaceUI] = useState<GamePokemon | null>(null);
-  const [learningPokemonIdx, setLearningPokemonIdx] = useState<number | null>(null);
-  const [potentialMoves, setPotentialMoves] = useState<Move[]>([]);
-  const [selectedNewMove, setSelectedNewMove] = useState<Move | null>(null);
   const [selectedGens, setSelectedGens] = useState<number[]>([1]);
   const [startLevel, setStartLevel] = useState<number>(50);
   const [starterOptions, setStarterOptions] = useState<GamePokemon[]>([]);
   const [selectedStarterIndices, setSelectedStarterIndices] = useState<number[]>([]);
-  const [rewardPokemonOptions, setRewardPokemonOptions] = useState<GamePokemon[]>([]);
-  const [showRewardPokemonSelect, setShowRewardPokemonSelect] = useState(false);
   const [hoveredMove, setHoveredMove] = useState<Move | null>(null);
   const [infoPokemonIdx, setInfoPokemonIdx] = useState<number | null>(null);
   const [prevGameState, setPrevGameState] = useState<GameState>('START');
   const [showLogHistory, setShowLogHistory] = useState(false);
-  const [currentLanguage, setCurrentLanguage] = useState('zh-hans');
   const [pendingRewardAction, setPendingRewardAction] = useState<'MOVE' | 'EVOLUTION' | null>(null);
-  const [evolutionConfirmChoice, setEvolutionConfirmChoice] = useState<Pokemon | null>(null);
-  const [isEvolutionAnimating, setIsEvolutionAnimating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inventory, setInventory] = useState<Item[]>([]);
   const [stage, setStage] = useState(1);
-  const [enemy, setEnemy] = useState<GamePokemon | null>(null);
-  const [battleLog, setBattleLog] = useState<string[]>([]);
-  const [turn, setTurn] = useState<'PLAYER' | 'ENEMY'>('PLAYER');
-  const [battleMenuTab, setBattleMenuTab] = useState<BattleMenuTab>('MAIN');
-
-  const [weather, setWeather] = useState<Weather>('none');
-  const [weatherTurns, setWeatherTurns] = useState(0);
-  const [terrain, setTerrain] = useState<Terrain>('none');
-  const [terrainTurns, setTerrainTurns] = useState(0);
-  const [dimension, setDimension] = useState<Dimension>('none');
-  const [dimensionTurns, setDimensionTurns] = useState(0);
-  const [evolutionTarget, setEvolutionTarget] = useState<GamePokemon | null>(null);
-  const [isEvolving, setIsEvolving] = useState(false);
-  const [evolvedPokemon, setEvolvedPokemon] = useState<GamePokemon | null>(null);
-  const [evolutionChoices, setEvolutionChoices] = useState<Pokemon[]>([]);
-  const [selectedPokemonForEvolution, setSelectedPokemonForEvolution] = useState<{pokemon: GamePokemon, index: number} | null>(null);
-  const [canEvolveMap, setCanEvolveMap] = useState<Record<number, boolean>>({});
-  const [isCheckingEvolution, setIsCheckingEvolution] = useState(false);
-
-  const uiStrings: Record<string, Record<string, string>> = {
-    'zh-hans': {
-      stage: '关卡',
-      switch: '出战',
-      info: '详情',
-      selectMove: '选择技能',
-      back: '返回',
-      victory: '胜利！',
-      chooseReward: '选择一项奖励以继续你的冒险',
-      viewTeam: '查看我的队伍',
-      teamList: '队伍列表',
-      randomRewards: '随机奖励',
-      getItem: '获得道具',
-      learnMove: '学习新技能',
-      learnMoveDesc: '让队伍中的一只宝可梦学习一个新技能',
-      evolutionReward: '宝可梦进化',
-      evolutionRewardDesc: '让队伍中的一只宝可梦进化到下一阶段',
-      specialReward: '特殊奖励',
-      joinTeam: '加入队伍',
-      selectThis: '选择此项',
-      mysteryShop: '神秘商店',
-      buyItem: '购买道具',
-      insufficientCoins: '金币不足',
-      winBattle: '胜利！击败了 {name}！',
-      terrain_grassy_heal: '{name} 通过青草场地恢复了体力！',
-      weatherDamage: '{name} 受到了天气伤害！',
-      dimension_magic_room_block: '魔法空间生效中，无法使用道具！',
-      catchSuccess: '捕捉成功！获得了 {coins} 金币！',
-      battleVictory: '胜利！获得了 {coins} 金币！',
-      teamFull: '队伍已满！',
-      replacePartner: '选择一只宝可梦进行替换，以加入新的伙伴',
-      power: '威力',
-      accuracy: '命中',
-      pp: '次数',
-      nature: '性格',
-      ability: '特性',
-      none: '无',
-      stats: '能力值',
-      baseStats: '种族值',
-      actualStats: '最终能力',
-      currentMoves: '当前技能',
-      base: '种族',
-      iv: '个体值',
-      physical: '物理',
-      special: '特攻',
-      status: '变化',
-      confirm: '确认',
-      cancel: '取消',
-      battleLog: '战斗记录',
-      hp: '体力',
-      attack: '攻击',
-      defense: '防御',
-      spAtk: '特攻',
-      spDef: '特防',
-      speed: '速度',
-      selectToLearn: '选择一只宝可梦来学习新的力量',
-      retrievingMoves: '正在检索可学习的技能...',
-      replaceWhichMove: '替换哪个技能？',
-      alreadyKnows4: '{name} 已经学会了4个技能。',
-      selectOldToReplace: '请选择一个旧技能来替换为 {move}。',
-      movesCount: '{count}/4 技能',
-      learnMoveBtn: '学习技能',
-      cancelReplace: '取消替换',
-      searchingPokemon: '正在寻找宝可梦...',
-      battleHistory: '对战历史',
-      chooseStarter: '选择你的初始伙伴',
-      chooseStarterDesc: '请选择 3 只宝可梦作为你的初始伙伴。点击卡片进行选择，再次点击取消。',
-      selectThreeStarters: '请选择 3 只宝可梦',
-      confirmSelection: '确认选择并开始冒险',
-      chooseNewPartner: '选择新的伙伴',
-      newPartner: '新的伙伴',
-      newPartnerDesc: '从随机出现的宝可梦中选择一只加入你的队伍',
-      startingMoves: '初始技能',
-      viewDetails: '查看详情',
-      iChooseYou: '就决定是你了！',
-      gymLeaderSent: '道馆馆主 派出了 {name}！',
-      wildPokemonAppeared: '野生的 {name} 出现了！',
-      youUsed: '你使用了 {name}！',
-      cannotCatchGym: '不能捕捉道馆馆主的宝可梦！',
-      catching: '正在捕捉...',
-      catchSuccessMsg: '成功捕捉了 {name}！',
-      joinedTeam: '{name} 已加入你的队伍！',
-      brokeFree: '{name} 挣脱了！',
-      withdrew: '你收回了 {name}！',
-      sentOut: '你派出了 {name}！',
-      usedMove: '{name} 使用了 {move}！',
-      superEffective: '这一击效果绝佳！',
-      notVeryEffective: '这一击收效甚微...',
-      noEffect: '似乎没有效果...',
-      fainted: '{name} 倒下了！',
-      enemyUsedMove: '对手的 {name} 使用了 {move}！',
-      noRecords: '尚无记录',
-      rogueJourney: '随机对战之旅：在无尽的挑战中生存',
-      startBattle: '开始对战',
-      selectRegion: '选择你的冒险地区',
-      nextStep: '下一步：选择等级',
-      setDifficulty: '设定初始挑战难度',
-      startAdventure: '开启冒险之旅',
-      nextLevel: '下一关',
-      thinking: '对手正在思考...',
-      commandPhase: '指令阶段',
-      whatToDo: '该怎么办呢？',
-      currentlyInBattle: '正在战斗中',
-      pokemonFainted: '宝可梦已倒下',
-      active: '出战中',
-      atkUp: '攻击↑',
-      defUp: '防御↑',
-      battle: '战斗',
-      bag: '背包',
-      pokemon: '宝可梦',
-      run: '逃跑',
-      myBag: '我的背包',
-      myTeam: '我的队伍',
-      bagEmpty: '背包空空如也',
-      backToMoves: '返回选择技能',
-      evolution: '进化',
-      evolveSuccess: '{name} 进化成了 {target}！',
-      cannotEvolve: '这只宝可梦目前无法进化。',
-      selectToEvolve: '选择一只宝可梦进行进化',
-      chooseEvolution: '选择进化形态',
-      evolve: '进化',
-      confirmEvolution: '确认进化',
-      confirmEvolutionDesc: '是否确定将 {name} 进化为 {target}？',
-      evolveSuccessMsg: '恭喜！{name} 进化成为了 {target}！',
-      canEvolve: '可以进化',
-      cannotEvolveShort: '无法进化',
-      checkingEvolution: '正在检查进化...',
-      shop: '商店',
-      price: '价格',
-      learningNewMove: '正在学习新技能...',
-      learnThisMove: '学习此技能',
-      noMoreMoves: '这只宝可梦暂时没有更多可学习的技能了。',
-      reselectPokemon: '重新选择宝可梦',
-      errorOccurred: '发生错误',
-      fetchFailed: '从 PokéAPI 获取数据失败。请检查网络并重试。',
-      retry: '重试',
-      challengeEnd: '挑战结束',
-      fellAtStage: '你在第 {stage} 关倒下了',
-      restart: '重新开始',
-      weather_none: '天气：无',
-      weather_sunny: '天气：大晴天',
-      weather_rainy: '天气：下雨',
-      weather_sandstorm: '天气：沙暴',
-      weather_snow: '天气：下雪',
-      weather_heavy_rain: '天气：始源之海',
-      weather_harsh_sunlight: '天气：终结之地',
-      weather_strong_winds: '天气：德尔塔气流',
-      weather_sunny_effect: '阳光增强了火属性技能，削弱了水属性技能。',
-      weather_rainy_effect: '降雨增强了水属性技能，削弱了火属性技能。',
-      weather_sandstorm_effect: '沙暴正在肆虐！岩石、地面和钢属性以外的宝可梦会受到伤害。',
-      weather_snow_effect: '大雪正在降下！冰属性宝可梦的防御提升。',
-      weather_heavy_rain_effect: '始源之海正在肆虐！火属性技能无效。',
-      weather_harsh_sunlight_effect: '终结之地正在肆虐！水属性技能无效。',
-      weather_strong_winds_effect: '德尔塔气流正在肆虐！飞行属性的弱点消失。',
-      
-      terrain_none: '场地：无',
-      terrain_electric: '场地：电气场地',
-      terrain_grassy: '场地：青草场地',
-      terrain_psychic: '场地：精神场地',
-      terrain_misty: '场地：薄雾场地',
-      terrain_electric_effect: '电属性技能威力提升，地面上的宝可梦无法入眠。',
-      terrain_grassy_effect: '草属性技能威力提升，地面上的宝可梦每回合回复HP。',
-      terrain_psychic_effect: '超能力属性技能威力提升，地面上的宝可梦免疫先制技能。',
-      terrain_misty_effect: '龙属性技能伤害减半，地面上的宝可梦免疫异常状态。',
-
-      dimension_none: '维度：无',
-      dimension_trick_room: '维度：戏法空间',
-      dimension_magic_room: '维度：魔术空间',
-      dimension_wonder_room: '维度：奇妙空间',
-      dimension_trick_room_effect: '速度慢的宝可梦先行动。',
-      dimension_magic_room_effect: '所有宝可梦的携带道具无效。',
-      dimension_wonder_room_effect: '所有宝可梦的防御与特防互换。',
-      reroll: '重新选择',
-      rerollCost: '消耗 {cost} 金币',
-      reachedFloor: '你在第 {stage} 关倒下了',
-      gameOver: '挑战结束'
-    },
-    'zh-hant': {
-      stage: '關卡',
-      switch: '出戰',
-      info: '詳情',
-      selectMove: '選擇技能',
-      back: '返回',
-      victory: '勝利！',
-      chooseReward: '選擇一項獎勵以繼續你的冒險',
-      viewTeam: '查看我的隊伍',
-      teamList: '隊伍列表',
-      randomRewards: '隨機獎勵',
-      getItem: '獲得道具',
-      learnMove: '學習新技能',
-      learnMoveDesc: '讓隊伍中的一隻寶可夢學習一個新技能',
-      evolutionReward: '寶可夢進化',
-      evolutionRewardDesc: '讓隊伍中的一隻寶可夢進化到下一階段',
-      specialReward: '特殊獎勵',
-      joinTeam: '加入隊伍',
-      selectThis: '選擇此項',
-      mysteryShop: '神秘商店 (使用金幣購買)',
-      insufficientCoins: '金幣不足',
-      buyItem: '購買道具',
-      teamFull: '隊伍已滿！',
-      replacePartner: '選擇一隻寶可夢進行替換，以加入新的夥伴',
-      power: '威力',
-      accuracy: '命中',
-      pp: '次數',
-      nature: '性格',
-      ability: '特性',
-      none: '無',
-      stats: '能力值',
-      baseStats: '種族值',
-      actualStats: '最終能力',
-      currentMoves: '當前技能',
-      base: '種族',
-      iv: '個體值',
-      physical: '物理',
-      special: '特攻',
-      status: '變化',
-      confirm: '確認',
-      cancel: '取消',
-      battleLog: '戰鬥記錄',
-      hp: '體力',
-      attack: '攻擊',
-      defense: '防禦',
-      spAtk: '特攻',
-      spDef: '特防',
-      speed: '速度',
-      catchSuccess: '捕捉成功！獲得了 {coins} 金幣！',
-      battleVictory: '戰鬥勝利！獲得了 {coins} 金幣！',
-      selectToLearn: '選擇一隻寶可夢來學習新的力量',
-      retrievingMoves: '正在檢索可學習的技能...',
-      replaceWhichMove: '替換哪個技能？',
-      alreadyKnows4: '{name} 已經學會了4個技能。',
-      selectOldToReplace: '請選擇一個舊技能來替換為 {move}。',
-      movesCount: '{count}/4 技能',
-      learnMoveBtn: '學習技能',
-      cancelReplace: '取消替換',
-      searchingPokemon: '正在尋找寶可夢...',
-      battleHistory: '對戰歷史',
-      chooseStarter: '選擇你的初始夥伴',
-      chooseStarterDesc: '請選擇 3 隻寶可夢作為你的初始夥伴。點擊卡片進行選擇，再次點擊取消。',
-      selectThreeStarters: '請選擇 3 隻寶可夢',
-      confirmSelection: '確認選擇並開始冒險',
-      chooseNewPartner: '選擇新的夥伴',
-      newPartner: '新的夥伴',
-      newPartnerDesc: '從隨機出現的寶可夢中選擇一隻加入你的隊伍',
-      startingMoves: '初始技能',
-      viewDetails: '查看詳情',
-      iChooseYou: '就決定是你了！',
-      gymLeaderSent: '道館館主 派出了 {name}！',
-      wildPokemonAppeared: '野生的 {name} 出現了！',
-      youUsed: '你使用了 {name}！',
-      cannotCatchGym: '不能捕捉道館館主的寶可夢！',
-      catching: '正在捕捉...',
-      catchSuccessMsg: '成功捕捉了 {name}！',
-      joinedTeam: '{name} 已加入你的隊伍！',
-      brokeFree: '{name} 掙脫了！',
-      withdrew: '你收回了 {name}！',
-      sentOut: '你派出了 {name}！',
-      usedMove: '{name} 使用了 {move}！',
-      superEffective: '這一擊效果絕佳！',
-      notVeryEffective: '這一擊收效甚微...',
-      noEffect: '似乎沒有效果...',
-      fainted: '{name} 倒下了！',
-      enemyUsedMove: '對手的 {name} 使用了 {move}！',
-      noRecords: '尚無記錄',
-      rogueJourney: '隨機對戰之旅：在無盡的挑戰中生存',
-      startBattle: '開始對戰',
-      selectRegion: '選擇你的冒險地區',
-      nextStep: '下一步：選擇等級',
-      setDifficulty: '設定初始挑戰難度',
-      startAdventure: '開啟冒險之旅',
-      nextLevel: '下一關',
-      thinking: '對手正在思考...',
-      commandPhase: '指令階段',
-      whatToDo: '該怎麼辦呢？',
-      currentlyInBattle: '正在戰鬥中',
-      pokemonFainted: '寶可夢已倒下',
-      active: '出戰中',
-      atkUp: '攻擊↑',
-      defUp: '防禦↑',
-      battle: '戰鬥',
-      bag: '背包',
-      pokemon: '寶可夢',
-      run: '逃跑',
-      myBag: '我的背包',
-      myTeam: '我的隊伍',
-      bagEmpty: '背包空空如也',
-      backToMoves: '返回選擇技能',
-      evolution: '進化',
-      evolveSuccess: '{name} 進化成了 {target}！',
-      cannotEvolve: '這隻寶可夢目前無法進化。',
-      selectToEvolve: '選擇一隻寶可夢進行進化',
-      chooseEvolution: '選擇進化形態',
-      evolve: '進化',
-      confirmEvolution: '確認進化',
-      confirmEvolutionDesc: '是否確定將 {name} 進化為 {target}？',
-      evolveSuccessMsg: '恭喜！{name} 進化成为了 {target}！',
-      canEvolve: '可以進化',
-      cannotEvolveShort: '無法進化',
-      checkingEvolution: '正在檢查進化...',
-      shop: '商店',
-      price: '價格',
-      learningNewMove: '正在學習新技能...',
-      learnThisMove: '學習此技能',
-      noMoreMoves: '這隻寶可夢暫時沒有更多可學習的技能了。',
-      reselectPokemon: '重新選擇寶可夢',
-      challengeEnd: '挑戰結束',
-      fellAtStage: '你在第 {stage} 關倒下了',
-      restart: '重新開始',
-      weather_none: '天氣：無',
-      weather_sunny: '天氣：大晴天',
-      weather_rainy: '天氣：下雨',
-      weather_sandstorm: '天氣：沙暴',
-      weather_snow: '天氣：下雪',
-      weather_heavy_rain: '天氣：始源之海',
-      weather_harsh_sunlight: '天氣：終結之地',
-      weather_strong_winds: '天氣：德爾塔氣流',
-      weather_sunny_effect: '陽光增強了火屬性技能，削弱了水屬性技能。',
-      weather_rainy_effect: '降雨增強了水屬性技能，削弱了火屬性技能。',
-      weather_sandstorm_effect: '沙暴正在肆虐！岩石、地面和鋼屬性以外的寶可夢會受到傷害。',
-      weather_snow_effect: '大雪正在降下！冰屬性寶可夢的防禦提升。',
-      weather_heavy_rain_effect: '始源之海正在肆虐！火屬性技能無效。',
-      weather_harsh_sunlight_effect: '終結之地正在肆虐！水屬性技能無效。',
-      weather_strong_winds_effect: '德爾塔氣流正在肆虐！飛行屬性的弱點消失。',
-
-      terrain_none: '場地：無',
-      terrain_electric: '場地：電氣場地',
-      terrain_grassy: '場地：青草場地',
-      terrain_psychic: '場地：精神場地',
-      terrain_misty: '場地：薄霧場地',
-      terrain_electric_effect: '電屬性技能威力提升，地面上的寶可夢無法入眠。',
-      terrain_grassy_effect: '草屬性技能威力提升，地面上的寶可夢每回合回復HP。',
-      terrain_psychic_effect: '超能力屬性技能威力提升，地面上的寶可夢免疫先制技能。',
-      terrain_misty_effect: '龍屬性技能傷害減半，地面上的寶可夢免疫異常狀態。',
-
-      dimension_none: '維度：無',
-      dimension_trick_room: '維度：戲法空間',
-      dimension_magic_room: '維度：魔術空間',
-      dimension_wonder_room: '維度：奇妙空間',
-      dimension_trick_room_effect: '速度慢的寶可夢先行動。',
-      dimension_magic_room_effect: '所有寶可夢的攜帶道具無效。',
-      dimension_wonder_room_effect: '所有寶可夢的防禦與特防互換。',
-      reroll: '重新選擇',
-      rerollCost: '消耗 {cost} 點金幣',
-      reachedFloor: '你在第 {stage} 關倒下了',
-      gameOver: '挑戰結束'
-    },
-    'en': {
-      stage: 'Stage',
-      switch: 'Switch',
-      info: 'Info',
-      selectMove: 'Select Move',
-      back: 'Back',
-      victory: 'Victory!',
-      chooseReward: 'Choose a reward to continue your adventure',
-      viewTeam: 'View My Team',
-      teamList: 'Team List',
-      randomRewards: 'Random Rewards',
-      getItem: 'Get Item',
-      learnMove: 'Learn New Move',
-      learnMoveDesc: 'Let a Pokemon in your team learn a new move',
-      evolutionReward: 'Pokemon Evolution',
-      evolutionRewardDesc: 'Let a Pokemon in your team evolve to the next stage',
-      canEvolve: 'Can Evolve',
-      cannotEvolveShort: 'No Evolution',
-      checkingEvolution: 'Checking...',
-      specialReward: 'Special Reward',
-      joinTeam: 'Join Team',
-      selectThis: 'Select This',
-      mysteryShop: 'Mystery Shop (Buy with Coins)',
-      insufficientCoins: 'Insufficient Coins',
-      buyItem: 'Buy Item',
-      teamFull: 'Team Full!',
-      replacePartner: 'Select a Pokemon to replace with the new partner',
-      power: 'Power',
-      accuracy: 'Accuracy',
-      pp: 'PP',
-      nature: 'Nature',
-      ability: 'Ability',
-      none: 'None',
-      stats: 'Stats',
-      baseStats: 'Base Stats',
-      actualStats: 'Final Stats',
-      currentMoves: 'Current Moves',
-      base: 'Base',
-      iv: 'IV',
-      physical: 'Physical',
-      special: 'Special',
-      status: 'Status',
-      confirm: 'Confirm',
-      cancel: 'Cancel',
-      battleLog: 'Battle Log',
-      hp: 'HP',
-      attack: 'Attack',
-      defense: 'Defense',
-      spAtk: 'Sp. Atk',
-      spDef: 'Sp. Def',
-      speed: 'Speed',
-      winBattle: 'Victory! Defeated {name}!',
-      terrain_grassy_heal: '{name} restored HP from Grassy Terrain!',
-      weatherDamage: '{name} took damage from the weather!',
-      dimension_magic_room_block: 'Magic Room is in effect! Items cannot be used!',
-      catchSuccess: 'Caught successfully! Earned {coins} coins!',
-      battleVictory: 'Victory! Earned {coins} coins!',
-      selectToLearn: 'Select a Pokemon to learn new power',
-      retrievingMoves: 'Retrieving learnable moves...',
-      replaceWhichMove: 'Replace which move?',
-      alreadyKnows4: '{name} already knows 4 moves.',
-      selectOldToReplace: 'Please select an old move to replace with {move}.',
-      movesCount: '{count}/4 Moves',
-      learnMoveBtn: 'Learn Move',
-      cancelReplace: 'Cancel',
-      searchingPokemon: 'Searching for Pokemon...',
-      battleHistory: 'Battle History',
-      chooseStarter: 'Choose Your Starter',
-      chooseStarterDesc: 'Please select 3 Pokemon as your initial partners. Click a card to select, click again to deselect.',
-      selectThreeStarters: 'Please select 3 Pokemon',
-      confirmSelection: 'Confirm & Start Adventure',
-      chooseNewPartner: 'Choose New Partner',
-      newPartner: 'New Partner',
-      newPartnerDesc: 'Choose one from randomly appearing Pokemon to join your team',
-      startingMoves: 'Starting Moves',
-      viewDetails: 'View Details',
-      iChooseYou: 'I choose you!',
-      gymLeaderSent: 'Gym Leader sent out {name}!',
-      wildPokemonAppeared: 'A wild {name} appeared!',
-      youUsed: 'You used {name}!',
-      cannotCatchGym: 'Cannot catch Gym Leader\'s Pokemon!',
-      catching: 'Catching...',
-      catchSuccessMsg: 'Caught {name} successfully!',
-      joinedTeam: '{name} joined your team!',
-      brokeFree: '{name} broke free!',
-      withdrew: 'You withdrew {name}!',
-      sentOut: 'You sent out {name}!',
-      usedMove: '{name} used {move}!',
-      superEffective: 'It\'s super effective!',
-      notVeryEffective: 'It\'s not very effective...',
-      noEffect: 'It had no effect...',
-      fainted: '{name} fainted!',
-      enemyUsedMove: 'Enemy {name} used {move}!',
-      noRecords: 'No records',
-      rogueJourney: 'Roguelike Journey: Survive in endless challenges',
-      startBattle: 'Start Battle',
-      selectRegion: 'Select Your Region',
-      nextStep: 'Next: Select Level',
-      setDifficulty: 'Set Initial Difficulty',
-      startAdventure: 'Start Adventure',
-      nextLevel: 'Next Level',
-      thinking: 'Enemy is thinking...',
-      commandPhase: 'Command Phase',
-      whatToDo: 'What will you do?',
-      atkUp: 'Atk↑',
-      defUp: 'Def↑',
-      battle: 'Battle',
-      bag: 'Bag',
-      pokemon: 'Pokemon',
-      run: 'Run',
-      myBag: 'My Bag',
-      myTeam: 'My Team',
-      bagEmpty: 'Bag is empty',
-      backToMoves: 'Back to Moves',
-      evolution: 'Evolution',
-      evolveSuccess: '{name} evolved into {target}!',
-      cannotEvolve: 'This Pokemon cannot evolve at this time.',
-      selectToEvolve: 'Select a Pokemon to evolve',
-      chooseEvolution: 'Choose Evolution Form',
-      evolve: 'Evolve',
-      confirmEvolution: 'Confirm Evolution',
-      confirmEvolutionDesc: 'Are you sure you want to evolve {name} into {target}?',
-      evolveSuccessMsg: 'Congratulations! {name} evolved into {target}!',
-      shop: 'Shop',
-      price: 'Price',
-      learningNewMove: 'Learning new move...',
-      learnThisMove: 'Learn this move',
-      noMoreMoves: 'This Pokemon has no more learnable moves for now.',
-      reselectPokemon: 'Reselect Pokemon',
-      errorOccurred: 'An error occurred',
-      fetchFailed: 'Failed to fetch data from PokeAPI. Please check your network and try again.',
-      retry: 'Retry',
-      challengeEnd: 'Challenge Ended',
-      fellAtStage: 'You fell at Stage {stage}',
-      restart: 'Restart',
-      weather_none: 'Weather: None',
-      weather_sunny: 'Weather: Sunny',
-      weather_rainy: 'Weather: Rainy',
-      weather_sandstorm: 'Weather: Sandstorm',
-      weather_snow: 'Weather: Snow',
-      weather_heavy_rain: 'Weather: Primordial Sea',
-      weather_harsh_sunlight: 'Weather: Desolate Land',
-      weather_strong_winds: 'Weather: Delta Stream',
-      weather_sunny_effect: 'The sunlight is strong! Fire moves are boosted, Water moves are weakened.',
-      weather_rainy_effect: 'It is raining! Water moves are boosted, Fire moves are weakened.',
-      weather_sandstorm_effect: 'A sandstorm is raging! Non-Rock/Ground/Steel Pokemon take damage.',
-      weather_snow_effect: 'Snow is falling! Ice Pokemon defense is boosted.',
-      weather_heavy_rain_effect: 'The Primordial Sea is raging! Fire moves are neutralized.',
-      weather_harsh_sunlight_effect: 'The Desolate Land is raging! Water moves are neutralized.',
-      weather_strong_winds_effect: 'The Delta Stream is raging! Flying types weaknesses are removed.',
-
-      terrain_none: 'Terrain: None',
-      terrain_electric: 'Terrain: Electric',
-      terrain_grassy: 'Terrain: Grassy',
-      terrain_psychic: 'Terrain: Psychic',
-      terrain_misty: 'Terrain: Misty',
-      terrain_electric_effect: 'Electric moves are boosted. Pokemon on the ground cannot sleep.',
-      terrain_grassy_effect: 'Grassy moves are boosted. Pokemon on the ground restore HP each turn.',
-      terrain_psychic_effect: 'Psychic moves are boosted. Pokemon on the ground are immune to priority moves.',
-      terrain_misty_effect: 'Dragon moves are halved. Pokemon on the ground are immune to status ailments.',
-
-      dimension_none: 'Dimension: None',
-      dimension_trick_room: 'Dimension: Trick Room',
-      dimension_magic_room: 'Dimension: Magic Room',
-      dimension_wonder_room: 'Dimension: Wonder Room',
-      dimension_trick_room_effect: 'Slower Pokemon move first.',
-      dimension_magic_room_effect: 'Held items have no effect.',
-      dimension_wonder_room_effect: 'Defense and Sp. Def are swapped.',
-      reroll: 'Reroll',
-      rerollCost: 'Cost {cost} Coins',
-      reachedFloor: 'You reached floor {stage}',
-      gameOver: 'GAME OVER'
-    }
-  };
+  const [showLangMenu, setShowLangMenu] = useState(false);
 
   useEffect(() => {
     if (pendingRewardAction === 'EVOLUTION') {
@@ -1199,88 +650,7 @@ export default function App() {
       };
       checkEvolutions();
     }
-  }, [pendingRewardAction, playerTeam]);
-
-  const t = useCallback((key: string, params?: Record<string, string | number>) => {
-    const lang = currentLanguage.startsWith('zh') ? currentLanguage : (uiStrings[currentLanguage] ? currentLanguage : 'en');
-    let str = uiStrings[lang]?.[key] || uiStrings['en']?.[key] || key;
-    if (params) {
-      Object.entries(params).forEach(([k, v]) => {
-        str = str.split(`{${k}}`).join(String(v));
-      });
-    }
-    return str;
-  }, [currentLanguage]);
-  const [showLangMenu, setShowLangMenu] = useState(false);
-
-  // 本地化辅助函数
-  const getLocalized = useCallback((obj: any, key: string = 'name') => {
-    if (!obj) return '';
-    
-    // 如果是道具，直接返回 zhName (目前道具是硬编码的)
-    if (obj.id && (obj.id === 'potion' || obj.id === 'pokeball' || obj.isBall || obj.isBattleItem)) {
-      return currentLanguage.startsWith('zh') ? obj.zhName : obj.name;
-    }
-
-    // 查找 names 数组
-    if (obj.names && Array.isArray(obj.names)) {
-      const entry = obj.names.find((n: any) => n.language.name === currentLanguage);
-      if (entry) return entry.name;
-      
-      // 备选方案：如果是中文，尝试找另一种中文
-      if (currentLanguage === 'zh-hans') {
-        const alt = obj.names.find((n: any) => n.language.name === 'zh-hant');
-        if (alt) return alt.name;
-      } else if (currentLanguage === 'zh-hant') {
-        const alt = obj.names.find((n: any) => n.language.name === 'zh-hans');
-        if (alt) return alt.name;
-      }
-      
-      // 默认返回英文
-      const en = obj.names.find((n: any) => n.language.name === 'en');
-      if (en) return en.name;
-    }
-
-    // 默认回退
-    return obj.zhName || obj.name || '';
-  }, [currentLanguage]);
-
-  const getLocalizedDesc = useCallback((obj: any) => {
-    if (!obj) return '';
-    
-    // 道具回退
-    if (obj.id && (obj.id === 'potion' || obj.id === 'pokeball' || obj.isBall || obj.isBattleItem)) {
-      return currentLanguage.startsWith('zh') ? obj.zhDescription : obj.description;
-    }
-
-    if (obj.flavor_text_entries && Array.isArray(obj.flavor_text_entries)) {
-      const entry = obj.flavor_text_entries.find((e: any) => e.language.name === currentLanguage);
-      if (entry) return entry.flavor_text.replace(/\f/g, ' ');
-
-      // 备选方案
-      if (currentLanguage === 'zh-hans') {
-        const alt = obj.flavor_text_entries.find((e: any) => e.language.name === 'zh-hant');
-        if (alt) return alt.flavor_text.replace(/\f/g, ' ');
-      } else if (currentLanguage === 'zh-hant') {
-        const alt = obj.flavor_text_entries.find((e: any) => e.language.name === 'zh-hans');
-        if (alt) return alt.flavor_text.replace(/\f/g, ' ');
-      }
-
-      const en = obj.flavor_text_entries.find((e: any) => e.language.name === 'en');
-      if (en) return en.flavor_text.replace(/\f/g, ' ');
-    }
-
-    return obj.zhDescription || obj.description || '';
-  }, [currentLanguage]);
-
-  const getLocalizedNature = useCallback((nature: Nature) => {
-    if (currentLanguage.startsWith('zh')) return nature.zhName;
-    return nature.name;
-  }, [currentLanguage]);
-
-  const getStatName = useCallback((stat: string) => {
-    return t(stat) || stat;
-  }, [t]);
+  }, [pendingRewardAction, playerTeam, setIsCheckingEvolution, setCanEvolveMap]);
 
   // 动画状态
   const [playerAnim, setPlayerAnim] = useState<'idle' | 'attack' | 'hit'>('idle');
@@ -1607,7 +977,7 @@ export default function App() {
   const isIce = (p: GamePokemon) => p.types.some(t => t.type.name === 'ice');
 
   const triggerAbility = async (pokemon: GamePokemon, target: GamePokemon, isPlayer: boolean) => {
-    const ability = pokemon.abilities[0]?.ability.name;
+    const ability = pokemon.ability?.name || pokemon.abilities[0]?.ability.name;
     const pokeName = getLocalized(pokemon);
     const targetName = getLocalized(target);
 
@@ -1699,13 +1069,13 @@ export default function App() {
 
   const executeAttack = async (move: Move, attacker: GamePokemon, defender: GamePokemon, isPlayerAttacker: boolean) => {
     // Clone to avoid direct mutation
-    const currentAttacker = { 
+    let currentAttacker = { 
       ...attacker, 
       statStages: { ...attacker.statStages },
       volatileStatus: attacker.volatileStatus ? [...attacker.volatileStatus] : undefined,
       selectedMoves: attacker.selectedMoves.map(m => ({ ...m }))
     };
-    const currentDefender = { 
+    let currentDefender = { 
       ...defender, 
       statStages: { ...defender.statStages },
       volatileStatus: defender.volatileStatus ? [...defender.volatileStatus] : undefined,
@@ -1812,139 +1182,53 @@ export default function App() {
       return { success: false, attacker: currentAttacker, defender: currentDefender };
     }
 
-    const { damage, multiplier, isMiss, isCrit } = calculateDamage(
-      move, 
-      currentAttacker, 
-      currentDefender, 
-      isPlayerAttacker ? activeBuffs.atk : enemyBuffs.atk, 
-      isPlayerAttacker ? enemyBuffs.def : activeBuffs.def
-    );
+    const context: BattleContext = {
+      weather,
+      terrain,
+      dimension,
+      isPlayerAttacker,
+      activeBuffs,
+      enemyBuffs,
+      t,
+      addMessagesSequentially,
+      updateStates
+    };
 
-    if (isMiss) {
-      await addMessagesSequentially([`${attackerName} 的攻击落空了！`]);
-      if (isPlayerAttacker) setPlayerAnim('idle');
-      else setEnemyAnim('idle');
-      setActiveMoveType(null);
+    const strategy = MoveEffectFactory.getStrategy(move);
+    const result = await strategy.execute(move, currentAttacker, currentDefender, context);
+
+    currentAttacker = result.attacker as GamePokemon;
+    currentDefender = result.defender as GamePokemon;
+
+    if (result.success === 'FLINCH') {
+      return { success: 'FLINCH', attacker: currentAttacker, defender: currentDefender };
+    }
+
+    if (result.success === 'FAINTED') {
+      return { success: 'FAINTED', attacker: currentAttacker, defender: currentDefender };
+    }
+
+    if (result.success === false) {
       return { success: false, attacker: currentAttacker, defender: currentDefender };
     }
 
-    if (isCrit) await addMessagesSequentially(['击中了要害！']);
-
-    if (damage < 0) {
-      await addMessagesSequentially([`${defenderName} 吸收了攻击并恢复了体力！`]);
-    }
-
-    let newDefenderHp = Math.max(0, Math.min(currentDefender.maxHp, currentDefender.currentHp - damage));
-
-    // Focus Sash
-    if (dimension !== 'magic_room' && newDefenderHp === 0 && currentDefender.currentHp === currentDefender.maxHp && currentDefender.heldItem?.id === 'focus_sash') {
-      newDefenderHp = 1;
-      await addMessagesSequentially([`${defenderName} 凭借气势披带撑住了！`]);
-      currentDefender.heldItem = undefined; // Consume
-    }
-
-    if (damage > 0) {
-      if (isPlayerAttacker) setEnemyAnim('hit');
-      else setPlayerAnim('hit');
-    }
-
-    // Update defender HP
-    currentDefender.currentHp = newDefenderHp;
-    updateStates(currentAttacker, currentDefender);
-
+    // Post-attack hooks (that were not moved to strategy yet)
     await checkBerries(currentDefender, !isPlayerAttacker);
 
-    // Handle Drain/Healing
-    let attackerHpChange = 0;
-    if (move.id === 'struggle') {
-      attackerHpChange -= Math.floor(currentAttacker.maxHp / 4);
-    } else if (move.drain !== 0 && damage > 0) {
-      attackerHpChange += Math.floor(damage * move.drain / 100);
-    }
-    if (move.healing !== 0) attackerHpChange += Math.floor(currentAttacker.maxHp * move.healing / 100);
+    // Handle Drain/Healing (if not handled by strategy)
+    // For now, let's assume strategy handled the core damage and HP updates.
+    // But some special effects like Struggle recoil might still be here if not in strategy.
+    
+    // Actually, let's keep the recoil/drain here for now if they are not in strategy.
+    // Wait, I should move them to strategy too.
 
-    if (attackerHpChange !== 0) {
-      currentAttacker.currentHp = Math.max(0, Math.min(currentAttacker.maxHp, currentAttacker.currentHp + attackerHpChange));
-      updateStates(currentAttacker, currentDefender);
-      await addMessagesSequentially([attackerHpChange > 0 ? `${attackerName} 恢复了体力！` : `${attackerName} 受到了反作用力伤害！`]);
-    }
-
-    // Effect messages
-    const effectMessages = [];
-    if (multiplier > 1) effectMessages.push(t('superEffective'));
-    if (multiplier < 1 && multiplier > 0) effectMessages.push(t('notVeryEffective'));
-    if (multiplier === 0) effectMessages.push(t('noEffect'));
-    if (effectMessages.length > 0) {
-      await addMessagesSequentially(effectMessages);
-    }
-
-    // Set environment
+    // Effect messages are already in strategy.
+    // Environment setting is already in App.tsx (setEnvironmentFromMove).
     await setEnvironmentFromMove(move);
 
-    // Handle Protect move
-    if (move.id === 'protect') {
-      currentAttacker.volatileStatus = [...(currentAttacker.volatileStatus || []), 'protect'];
-      updateStates(currentAttacker, currentDefender);
-      await addMessagesSequentially([`${attackerName} 进入了守住状态！`]);
-    }
-
-    // Handle Ailments and Stat Changes
-    if (currentDefender.currentHp > 0) {
-      const isTargetUser = move.target === 'user';
-      const target = isTargetUser ? currentAttacker : currentDefender;
-      const isPlayerTarget = (isPlayerAttacker && isTargetUser) || (!isPlayerAttacker && !isTargetUser);
-
-      if (move.ailment && !target.status && Math.random() * 100 < (move.ailmentChance || 100)) {
-        const targetTypes = target.types.map(t => t.type.name);
-        let immune = false;
-        if (move.ailment === 'burn' && targetTypes.includes('fire')) immune = true;
-        if (move.ailment === 'paralysis' && targetTypes.includes('electric')) immune = true;
-        if (move.ailment === 'freeze' && targetTypes.includes('ice')) immune = true;
-        if ((move.ailment === 'poison' || move.ailment === 'toxic') && (targetTypes.includes('poison') || targetTypes.includes('steel'))) immune = true;
-        
-        if (immune) {
-          // No message needed usually, just fails
-        } else if (terrain === 'misty' && isGrounded(target)) {
-          await addMessagesSequentially([t('terrain_misty_block').replace('{name}', getLocalized(target))]);
-        } else if (move.ailment === 'sleep' && terrain === 'electric' && isGrounded(target)) {
-          await addMessagesSequentially([t('terrain_electric_block').replace('{name}', getLocalized(target))]);
-        } else {
-          target.status = move.ailment;
-          updateStates(currentAttacker, currentDefender);
-          await addMessagesSequentially([`${getLocalized(target)} ${AILMENT_ZH[move.ailment] || move.ailment}了！`]);
-        }
-      }
-
-      if (move.statChanges) {
-        const newStatStages = { ...target.statStages };
-        let changed = false;
-        const isContrary = target.abilities.some(a => a.ability.name === 'contrary');
-        for (const sc of move.statChanges) {
-          const statKey = sc.stat as keyof StatStages;
-          const oldStage = newStatStages[statKey];
-          const change = isContrary ? -sc.change : sc.change;
-          const newStage = Math.max(-6, Math.min(6, oldStage + change));
-          if (newStage !== oldStage) {
-            newStatStages[statKey] = newStage;
-            changed = true;
-            await addMessagesSequentially([`${getLocalized(target)} 的 ${STAT_ZH[sc.stat] || sc.stat} ${change > 0 ? '提升' : '下降'}了！`]);
-          }
-        }
-        if (changed) {
-          target.statStages = newStatStages;
-          updateStates(currentAttacker, currentDefender);
-        }
-      }
-
-      if (Math.random() * 100 < (move.flinchChance || 0)) {
-        await addMessagesSequentially([`${defenderName} 畏缩了，无法动弹！`]);
-        return { success: 'FLINCH', attacker: currentAttacker, defender: currentDefender };
-      }
-    }
-
     // Contact abilities
-    if (damage > 0 && move.damage_class === 'physical' && currentDefender.currentHp > 0 && !currentAttacker.status) {
-      const defAbility = currentDefender.abilities[0]?.ability.name;
+    if (move.damage_class === 'physical' && currentDefender.currentHp > 0 && !currentAttacker.status) {
+      const defAbility = currentDefender.ability?.name || currentDefender.abilities[0]?.ability.name;
       let ailment: string | undefined;
       if (defAbility === 'static' && Math.random() < 0.3) ailment = 'paralysis';
       if (defAbility === 'flame-body' && Math.random() < 0.3) ailment = 'burn';
@@ -1962,7 +1246,6 @@ export default function App() {
     setActiveMoveType(null);
 
     if (currentDefender.currentHp <= 0) {
-      await addMessagesSequentially([t('fainted').replace('{name}', defenderName)]);
       return { success: 'FAINTED', attacker: currentAttacker, defender: currentDefender };
     }
 
@@ -2020,7 +1303,7 @@ export default function App() {
       let speed = p.calculatedStats.speed * (STAT_STAGE_MODIFIERS[p.statStages.speed as keyof typeof STAT_STAGE_MODIFIERS] || 1);
       if (p.status === 'paralysis') speed *= 0.5;
       
-      const ability = p.abilities[0]?.ability.name;
+      const ability = p.ability?.name || p.abilities[0]?.ability.name;
       if (ability === 'chlorophyll' && (weather === 'sunny' || weather === 'harsh_sunlight')) speed *= 2;
       if (ability === 'swift-swim' && (weather === 'rainy' || weather === 'heavy_rain')) speed *= 2;
       
@@ -2051,7 +1334,8 @@ export default function App() {
       currentPlayer = res1.attacker;
       currentEnemy = res1.defender;
       if (res1.success === 'FAINTED') {
-        if (currentPlayer.abilities.some(a => a.ability.name === 'moxie')) {
+        const pAbility = currentPlayer.ability?.name || currentPlayer.abilities[0]?.ability.name;
+        if (pAbility === 'moxie') {
           currentPlayer.statStages.attack = Math.min(6, currentPlayer.statStages.attack + 1);
           setPlayerTeam(prev => [{ ...prev[0], statStages: currentPlayer.statStages }, ...prev.slice(1)]);
           await addMessagesSequentially([`${getLocalized(currentPlayer)} 的自信过度提升了攻击！`]);
@@ -2064,7 +1348,8 @@ export default function App() {
         currentEnemy = res2.attacker;
         currentPlayer = res2.defender;
         if (res2.success === 'FAINTED') {
-          if (currentEnemy.abilities.some(a => a.ability.name === 'moxie')) {
+          const eAbility = currentEnemy.ability?.name || currentEnemy.abilities[0]?.ability.name;
+          if (eAbility === 'moxie') {
             currentEnemy.statStages.attack = Math.min(6, currentEnemy.statStages.attack + 1);
             setEnemy({ ...currentEnemy });
             await addMessagesSequentially([`${getLocalized(currentEnemy)} 的自信过度提升了攻击！`]);
@@ -2086,7 +1371,8 @@ export default function App() {
       currentEnemy = res1.attacker;
       currentPlayer = res1.defender;
       if (res1.success === 'FAINTED') {
-        if (currentEnemy.abilities.some(a => a.ability.name === 'moxie')) {
+        const eAbility = currentEnemy.ability?.name || currentEnemy.abilities[0]?.ability.name;
+        if (eAbility === 'moxie') {
           currentEnemy.statStages.attack = Math.min(6, currentEnemy.statStages.attack + 1);
           setEnemy({ ...currentEnemy });
           await addMessagesSequentially([`${getLocalized(currentEnemy)} 的自信过度提升了攻击！`]);
@@ -2106,7 +1392,8 @@ export default function App() {
         currentPlayer = res2.attacker;
         currentEnemy = res2.defender;
         if (res2.success === 'FAINTED') {
-          if (currentPlayer.abilities.some(a => a.ability.name === 'moxie')) {
+          const pAbility = currentPlayer.ability?.name || currentPlayer.abilities[0]?.ability.name;
+          if (pAbility === 'moxie') {
             currentPlayer.statStages.attack = Math.min(6, currentPlayer.statStages.attack + 1);
             setPlayerTeam(prev => [{ ...prev[0], statStages: currentPlayer.statStages }, ...prev.slice(1)]);
             await addMessagesSequentially([`${getLocalized(currentPlayer)} 的自信过度提升了攻击！`]);
@@ -2293,130 +1580,6 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const getTypeEffectiveness = (moveType: string, defenderTypes: { type: { name: string } }[]) => {
-    let multiplier = 1;
-    defenderTypes.forEach(t => {
-      const effect = TYPE_CHART[moveType]?.[t.type.name];
-      if (effect !== undefined) {
-        multiplier *= effect;
-      }
-    });
-    return multiplier;
-  };
-
-  const calculateDamage = (move: Move, attacker: GamePokemon, defender: GamePokemon, atkBuff: boolean, defBuff: boolean) => {
-    if (move.damage_class === 'status') {
-      const typeMultiplier = getTypeEffectiveness(move.type, defender.types);
-      return { damage: 0, multiplier: typeMultiplier, isMiss: false, isCrit: false };
-    }
-
-    // Fixed damage moves
-    if (move.id === 'night-shade' || move.id === 'seismic-toss') {
-      return { damage: attacker.level, multiplier: 1, isMiss: false, isCrit: false };
-    }
-    if (move.id === 'dragon-rage') {
-      return { damage: 40, multiplier: 1, isMiss: false, isCrit: false };
-    }
-    if (move.id === 'sonic-boom') {
-      return { damage: 20, multiplier: 1, isMiss: false, isCrit: false };
-    }
-
-    const basePower = move.power || 40;
-    
-    // 1. Calculate Level Factor
-    const levelFactor = Math.floor(2 * attacker.level / 5) + 2;
-    
-    // 2. Determine Attack and Defense stats
-    let atk = 1;
-    let def = 1;
-    
-    const ignoreDefenderStages = attacker.abilities.some(a => a.ability.name === 'unaware');
-    const ignoreAttackerStages = defender.abilities.some(a => a.ability.name === 'unaware');
-
-    // Critical Hit check
-    let critChance = 1/24;
-    if (move.critRate === 1) critChance = 1/8;
-    if (move.critRate === 2) critChance = 1/2;
-    if (move.critRate >= 3) critChance = 1;
-    const isCrit = Math.random() < critChance;
-
-    if (move.damage_class === 'special') {
-      let atkStage = attacker.statStages.spAtk;
-      if (isCrit && atkStage < 0) atkStage = 0;
-      atk = attacker.calculatedStats.spAtk * (ignoreAttackerStages ? 1 : (STAT_STAGE_MODIFIERS[atkStage as keyof typeof STAT_STAGE_MODIFIERS] || 1));
-      
-      let defStage = defender.statStages.spDef;
-      if (isCrit && defStage > 0) defStage = 0;
-      def = defender.calculatedStats.spDef * (ignoreDefenderStages ? 1 : (STAT_STAGE_MODIFIERS[defStage as keyof typeof STAT_STAGE_MODIFIERS] || 1));
-      
-      // Sandstorm: Rock types get 1.5x SpDef
-      if (weather === 'sandstorm' && defender.types.some(t => t.type.name === 'rock')) {
-        def = Math.floor(def * 1.5);
-      }
-    } else {
-      let atkStage = attacker.statStages.attack;
-      if (isCrit && atkStage < 0) atkStage = 0;
-      atk = attacker.calculatedStats.attack * (ignoreAttackerStages ? 1 : (STAT_STAGE_MODIFIERS[atkStage as keyof typeof STAT_STAGE_MODIFIERS] || 1));
-      
-      let defStage = defender.statStages.defense;
-      if (isCrit && defStage > 0) defStage = 0;
-      def = defender.calculatedStats.defense * (ignoreDefenderStages ? 1 : (STAT_STAGE_MODIFIERS[defStage as keyof typeof STAT_STAGE_MODIFIERS] || 1));
-      
-      // Snow: Ice types get 1.5x Defense
-      if (weather === 'snow' && defender.types.some(t => t.type.name === 'ice')) {
-        def = Math.floor(def * 1.5);
-      }
-    }
-
-    // Apply custom game buffs (e.g. from items or stage effects)
-    if (atkBuff) atk = Math.floor(atk * 1.5);
-    if (defBuff) def = Math.floor(def * 1.5);
-
-    // 3. Base Damage calculation
-    let damage = Math.floor(Math.floor(Math.floor(levelFactor * basePower * atk / def) / 50) + 2);
-
-    // 4. Modifiers
-    // Weather
-    if (weather === 'sunny' || weather === 'harsh_sunlight') {
-      if (move.type === 'fire') damage = Math.floor(damage * 1.5);
-      if (move.type === 'water') {
-        if (weather === 'harsh_sunlight') damage = 0;
-        else damage = Math.floor(damage * 0.5);
-      }
-    } else if (weather === 'rainy' || weather === 'heavy_rain') {
-      if (move.type === 'water') damage = Math.floor(damage * 1.5);
-      if (move.type === 'fire') {
-        if (weather === 'heavy_rain') damage = 0;
-        else damage = Math.floor(damage * 0.5);
-      }
-    }
-
-    // Critical Hit
-    if (isCrit) {
-      damage = Math.floor(damage * 1.5);
-    }
-
-    // Random Factor (0.85 - 1.00)
-    const randomFactor = (Math.floor(Math.random() * 16) + 85) / 100;
-    damage = Math.floor(damage * randomFactor);
-
-    // STAB
-    if (attacker.types.some(t => t.type.name === move.type)) {
-      damage = Math.floor(damage * 1.5);
-    }
-
-    // Type Effectiveness
-    const typeMultiplier = getTypeEffectiveness(move.type, defender.types);
-    damage = Math.floor(damage * typeMultiplier);
-
-    // Burn
-    if (attacker.status === 'burn' && move.damage_class === 'physical') {
-      damage = Math.floor(damage * 0.5);
-    }
-
-    return { damage: Math.max(0, damage), multiplier: typeMultiplier, isMiss: false, isCrit };
   };
 
   const generateRewardSet = async () => {
@@ -2855,9 +2018,8 @@ export default function App() {
 
                     <div className="flex gap-2 mb-6">
                       {starterOptions[infoPokemonIdx].types.map((t: any) => (
-                        <div key={t.type.name} className="flex items-center gap-2 bg-slate-900/60 px-4 py-1 rounded-lg border border-white/10">
+                        <div key={t.type.name} className="flex items-center gap-2 bg-slate-900/60 px-2 py-1 rounded-lg border border-white/10">
                           <TypeBadge type={t.type.name} size="xs" />
-                          <span className="text-[10px] font-black italic text-white uppercase">{TYPE_ZH[t.type.name as keyof typeof TYPE_ZH]}</span>
                         </div>
                       ))}
                     </div>
@@ -3067,9 +2229,8 @@ export default function App() {
 
                       <div className="flex gap-2 mb-6">
                         {rewardPokemonOptions[infoPokemonIdx].types.map((t: any) => (
-                          <div key={t.type.name} className="flex items-center gap-2 bg-slate-900/60 px-4 py-1 rounded-lg border border-white/10">
+                          <div key={t.type.name} className="flex items-center gap-2 bg-slate-900/60 px-2 py-1 rounded-lg border border-white/10">
                             <TypeBadge type={t.type.name} size="xs" />
-                            <span className="text-[10px] font-black italic text-white uppercase">{TYPE_ZH[t.type.name as keyof typeof TYPE_ZH]}</span>
                           </div>
                         ))}
                       </div>
@@ -3598,7 +2759,12 @@ export default function App() {
                   >
                     <img 
                       src={playerTeam[0].sprites.back_default || playerTeam[0].sprites.front_default} 
-                      className="w-56 h-56 sm:w-96 sm:h-96 object-contain drop-shadow-2xl opacity-95 relative z-10"
+                      onError={(e) => {
+                        if (e.currentTarget.src !== playerTeam[0].sprites.front_default) {
+                          e.currentTarget.src = playerTeam[0].sprites.front_default;
+                        }
+                      }}
+                      className="w-56 h-56 sm:w-96 sm:h-96 object-contain drop-shadow-2xl opacity-95 relative z-10 pixelated"
                       referrerPolicy="no-referrer"
                     />
                     <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[110%] h-14 bg-black/20 rounded-[100%] blur-xl -z-10"></div>
@@ -3674,6 +2840,8 @@ export default function App() {
                               return (
                                 <button
                                   key={idx}
+                                  onMouseEnter={() => setHoveredMove(move)}
+                                  onMouseLeave={() => setHoveredMove(null)}
                                   onClick={() => handleAttack(move)}
                                   className="group relative"
                                 >
@@ -3689,19 +2857,39 @@ export default function App() {
                                     </div>
                                     
                                     <div className="flex-1 text-left skew-x-[12deg]">
-                                      <div className="font-black text-sm sm:text-lg italic text-white uppercase tracking-tighter leading-tight drop-shadow-md">
-                                        {getLocalized(move)}
-                                      </div>
-                                      {effectiveness && (
-                                        <div className={`text-[10px] font-black italic flex items-center gap-1 ${effectiveness.color}`}>
-                                          <span>{effectiveness.icon}</span> {effectiveness.text}
+                                      <div className="flex items-center gap-2">
+                                        <div className="font-black text-sm sm:text-lg italic text-white uppercase tracking-tighter leading-tight drop-shadow-md truncate max-w-[120px]">
+                                          {getLocalized(move)}
                                         </div>
-                                      )}
+                                        {move.damage_class && (
+                                          <div className="bg-white/20 p-0.5 rounded flex-none">
+                                            {(() => {
+                                              const CatIcon = CATEGORY_ICONS[move.damage_class] || Sparkles;
+                                              return <CatIcon className="w-3 h-3 text-white" />;
+                                            })()}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        {move.power && (
+                                          <div className="text-[10px] font-black italic text-white/80">
+                                            威力: {move.power}
+                                          </div>
+                                        )}
+                                        {effectiveness && (
+                                          <div className={`text-[10px] font-black italic flex items-center gap-1 ${effectiveness.color}`}>
+                                            <span>{effectiveness.icon}</span> {effectiveness.text}
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                     
                                     <div className="flex flex-col items-end justify-center skew-x-[12deg] pr-2">
-                                      <div className="text-[14px] sm:text-[20px] font-black italic text-white leading-none">{move.currentPP}</div>
-                                      <div className="text-[10px] font-bold text-white/60">/ {move.maxPP}</div>
+                                      <div className="text-[10px] font-bold text-white/60 uppercase">PP</div>
+                                      <div className="flex items-baseline gap-0.5">
+                                        <div className="text-[14px] sm:text-[20px] font-black italic text-white leading-none">{move.currentPP}</div>
+                                        <div className="text-[10px] font-bold text-white/60">/ {move.maxPP}</div>
+                                      </div>
                                     </div>
 
                                     {/* 选中指示器 */}
@@ -3711,6 +2899,29 @@ export default function App() {
                               );
                             })}
                           </div>
+
+                          {/* Move Description Tooltip */}
+                          <AnimatePresence>
+                            {hoveredMove && (
+                              <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 10 }}
+                                className="mr-4 bg-slate-900/90 backdrop-blur-md border border-white/20 p-3 rounded-lg w-64 sm:w-80 shadow-2xl z-50"
+                              >
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-white font-black italic text-xs uppercase">{getLocalized(hoveredMove)}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-white/60 text-[10px] font-bold">ACC: {hoveredMove.accuracy || '---'}</span>
+                                    <span className="text-white/60 text-[10px] font-bold">PP: {hoveredMove.currentPP}/{hoveredMove.maxPP}</span>
+                                  </div>
+                                </div>
+                                <p className="text-white/80 text-[10px] leading-relaxed italic">
+                                  {getLocalizedDesc(hoveredMove)}
+                                </p>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                           
                           <button 
                             onClick={() => setBattleMenuTab('MAIN')}
@@ -4215,26 +3426,26 @@ export default function App() {
                       </div>
                     ) : (
                       <div className="flex flex-col h-full">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 overflow-y-auto pr-2 custom-scrollbar flex-1 mb-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 overflow-y-auto pr-2 custom-scrollbar flex-1 mb-4">
                           {evolutionChoices.map((choice) => (
                             <motion.button
                               key={choice.id}
-                              whileHover={{ scale: 1.02 }}
-                              whileTap={{ scale: 0.98 }}
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
                               onClick={() => setEvolutionConfirmChoice(choice)}
-                              className="bg-white p-8 rounded-2xl shadow-xl border-4 border-purple-100 hover:border-purple-500 transition-all flex flex-col items-center text-center group relative overflow-hidden"
+                              className="aspect-square bg-white rounded-2xl shadow-xl border-4 border-purple-100 hover:border-purple-500 transition-all flex flex-col items-center justify-center p-4 group relative overflow-hidden"
                             >
-                              <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500 skew-x-[45deg] translate-x-12 -translate-y-12 group-hover:translate-x-8 group-hover:-translate-y-8 transition-transform" />
+                              <div className="absolute top-0 right-0 w-16 h-16 bg-purple-500 skew-x-[45deg] translate-x-8 -translate-y-8 group-hover:translate-x-6 group-hover:-translate-y-6 transition-transform" />
                               <img 
                                 src={choice.sprites.front_default} 
-                                className="w-40 h-40 group-hover:scale-110 transition-transform z-10" 
+                                className="w-24 h-24 sm:w-32 sm:h-32 group-hover:scale-110 transition-transform z-10 object-contain" 
                                 referrerPolicy="no-referrer" 
                               />
-                              <div className="z-10 mt-4">
-                                <div className="font-black italic text-2xl uppercase text-slate-900">{getLocalized(choice)}</div>
-                                <div className="mt-4 flex justify-center gap-2">
+                              <div className="z-10 mt-2 w-full">
+                                <div className="font-black italic text-xs sm:text-sm uppercase text-slate-900 truncate">{getLocalized(choice)}</div>
+                                <div className="mt-1 flex justify-center gap-1">
                                   {choice.types.map(t => (
-                                    <TypeBadge key={t.type.name} type={t.type.name} size="sm" />
+                                    <TypeBadge key={t.type.name} type={t.type.name} size="xs" />
                                   ))}
                                 </div>
                               </div>
@@ -4426,7 +3637,7 @@ export default function App() {
                 const infoSource = prevGameState === 'STARTER_SELECT' ? starterOptions : playerTeam;
                 const p = infoPokemonIdx !== null ? infoSource[infoPokemonIdx] : (infoSource.length > 0 ? infoSource[0] : null);
                 const currentIdx = infoPokemonIdx !== null ? infoPokemonIdx : (infoSource.length > 0 ? 0 : null);
-                const ability = p?.abilities?.[0]?.ability;
+                const ability = p?.ability || p?.abilities?.[0]?.ability;
 
                 return (
                   <div className="absolute inset-0 z-[150] flex flex-col overflow-hidden">
@@ -4463,12 +3674,9 @@ export default function App() {
                             key={idx}
                             onClick={() => {
                               setInfoPokemonIdx(idx);
-                              if (prevGameState === 'BATTLE') {
-                                setShowTeamActionMenu(idx);
-                              }
                             }}
                             className={`
-                              group relative h-20 transition-all flex items-center
+                              group relative min-h-[80px] transition-all flex flex-col
                               ${currentIdx === idx ? 'scale-[1.02] z-10' : 'hover:scale-[1.01]'}
                             `}
                           >
@@ -4487,36 +3695,53 @@ export default function App() {
                               <div className="absolute left-[-10px] top-1/2 -translate-y-1/2 w-2 h-12 bg-lime-400 skew-x-[-10deg] z-20" />
                             )}
 
-                            <div className="relative z-10 flex items-center w-full px-4 gap-3">
-                              <div className="relative flex-none">
-                                <img 
-                                  src={tp.sprites.front_default} 
-                                  className={`w-14 h-14 object-contain pixelated ${tp.currentHp <= 0 ? 'grayscale opacity-50' : ''}`} 
-                                  referrerPolicy="no-referrer" 
-                                />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-1">
-                                  <div className="font-black italic text-sm uppercase truncate text-slate-900">
-                                    {getLocalized(tp)}
+                            <div className="relative z-10 flex flex-col w-full px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="relative flex-none">
+                                  <img 
+                                    src={tp.sprites.front_default} 
+                                    className={`w-14 h-14 object-contain pixelated ${tp.currentHp <= 0 ? 'grayscale opacity-50' : ''}`} 
+                                    referrerPolicy="no-referrer" 
+                                  />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="font-black italic text-sm uppercase truncate text-slate-900">
+                                      {getLocalized(tp)}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      {tp.gender === 'male' && <Mars className="w-3 h-3 text-blue-500" />}
+                                      {tp.gender === 'female' && <Venus className="w-3 h-3 text-pink-500" />}
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-1">
-                                    {tp.gender === 'male' && <Mars className="w-3 h-3 text-blue-500" />}
-                                    {tp.gender === 'female' && <Venus className="w-3 h-3 text-pink-500" />}
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                                      <div 
+                                        className={`h-full transition-all ${tp.currentHp / tp.maxHp > 0.5 ? 'bg-green-400' : tp.currentHp / tp.maxHp > 0.2 ? 'bg-yellow-400' : 'bg-red-400'}`} 
+                                        style={{ width: `${(tp.currentHp / tp.maxHp) * 100}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-[10px] font-black italic text-slate-500 whitespace-nowrap">
+                                      {tp.currentHp}/{tp.maxHp}
+                                    </span>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
-                                    <div 
-                                      className={`h-full transition-all ${tp.currentHp / tp.maxHp > 0.5 ? 'bg-green-400' : tp.currentHp / tp.maxHp > 0.2 ? 'bg-yellow-400' : 'bg-red-400'}`} 
-                                      style={{ width: `${(tp.currentHp / tp.maxHp) * 100}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-[10px] font-black italic text-slate-500 whitespace-nowrap">
-                                    {tp.currentHp}/{tp.maxHp}
-                                  </span>
-                                </div>
                               </div>
+                              
+                              {/* Switch Button (Always visible in battle for non-active healthy pokemon) */}
+                              {prevGameState === 'BATTLE' && idx !== 0 && tp.currentHp > 0 && (
+                                <div className="mt-2 flex justify-end">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      switchPokemon(idx);
+                                    }}
+                                    className="bg-slate-900 text-white text-[10px] font-black px-4 py-1 skew-x-[-10deg] hover:bg-slate-800 transition-all uppercase italic shadow-lg"
+                                  >
+                                    <span className="skew-x-[10deg] inline-block">{t('switch')}</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
                             
                             {idx === 0 && prevGameState === 'BATTLE' && (

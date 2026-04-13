@@ -42,7 +42,14 @@ export class PokemonEntity {
         speed: 0,
         accuracy: 0,
         evasion: 0,
-      }
+      },
+      volatileStatus: [],
+      ability: pokemon.abilities && pokemon.abilities.length > 0 ? {
+        name: pokemon.abilities[0].ability.name,
+        zhName: pokemon.abilities[0].ability.zhName || pokemon.abilities[0].ability.name,
+        description: '',
+        zhDescription: ''
+      } : undefined
     };
   }
 

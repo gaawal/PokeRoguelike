@@ -79,3 +79,49 @@ export const NATURES = [
   { name: 'serious', zhName: '认真', plus: '', minus: '' },
   { name: 'timid', zhName: '胆小', plus: 'speed', minus: 'attack' },
 ];
+
+export const AILMENT_ZH: Record<string, string> = {
+  poison: '中毒',
+  toxic: '剧毒',
+  paralysis: '麻痹',
+  burn: '灼伤',
+  freeze: '冰冻',
+  sleep: '睡眠',
+  confusion: '混乱',
+  infatuation: '着迷',
+  trap: '束缚',
+  nightmare: '噩梦',
+  leech_seed: '寄生种子',
+};
+
+export const STAT_ZH: Record<string, string> = {
+  attack: '攻击',
+  defense: '防御',
+  spAtk: '特攻',
+  spDef: '特防',
+  speed: '速度',
+  accuracy: '命中',
+  evasion: '闪避',
+};
+
+export const STAT_STAGE_MODIFIERS: Record<number, number> = {
+  '-6': 2/8, '-5': 2/7, '-4': 2/6, '-3': 2/5, '-2': 2/4, '-1': 2/3,
+  '0': 1,
+  '1': 1.5, '2': 2, '3': 2.5, '4': 3, '5': 3.5, '6': 4
+};
+
+export const ACC_EVA_STAGE_MODIFIERS: Record<number, number> = {
+  '-6': 3 / 9,
+  '-5': 3 / 8,
+  '-4': 3 / 7,
+  '-3': 3 / 6,
+  '-2': 3 / 5,
+  '-1': 3 / 4,
+  '0': 1,
+  '1': 4 / 3,
+  '2': 5 / 3,
+  '3': 6 / 3,
+  '4': 7 / 3,
+  '5': 8 / 3,
+  '6': 9 / 3,
+};

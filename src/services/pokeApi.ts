@@ -88,15 +88,23 @@ export async function fetchAbilityNames(url: string): Promise<any[]> {
   }
 }
 
-export async function fetchAbility(url: string): Promise<string> {
+export async function fetchAbility(url: string): Promise<any> {
   try {
     const response = await fetchWithRetry(url);
-    if (!response.ok) return '';
+    if (!response.ok) return null;
     const data = await response.json();
     const zhName = getZhName(data.names);
-    return zhName || data.name;
+    const description = data.effect_entries.find((e: any) => e.language.name === 'en')?.short_effect;
+    const zhDescription = data.flavor_text_entries.find((e: any) => e.language.name === 'zh-hans' || e.language.name === 'zh-hant')?.flavor_text;
+    
+    return {
+      name: data.name,
+      zhName: zhName || data.name,
+      description: description || '',
+      zhDescription: zhDescription || ''
+    };
   } catch (e) {
-    return '';
+    return null;
   }
 }
 
@@ -295,6 +303,13 @@ export async function getProcessedPokemon(
     speed: calculateStat(baseStats.speed, ivs.speed, level, false, getMod('speed')),
   };
 
+  // Select Ability
+  let ability = undefined;
+  if (raw.abilities && raw.abilities.length > 0) {
+    const randomAbility = raw.abilities[Math.floor(Math.random() * raw.abilities.length)];
+    ability = await fetchAbility(randomAbility.ability.url);
+  }
+
   return {
     ...raw,
     level,
@@ -315,7 +330,9 @@ export async function getProcessedPokemon(
       speed: 0,
       accuracy: 0,
       evasion: 0,
-    }
+    },
+    volatileStatus: [],
+    ability
   };
 }
 

@@ -23,6 +23,7 @@ export interface Pokemon {
   abilities: {
     ability: {
       name: string;
+      url: string;
       zhName?: string;
       names?: { name: string; language: { name: string } }[];
     };
@@ -47,6 +48,7 @@ export interface Move {
   pp?: number;
   currentPP?: number;
   maxPP?: number;
+  description?: string;
   zhDescription?: string;
   flavor_text_entries?: { flavor_text: string; language: { name: string } }[];
   ailment?: string;
@@ -99,7 +101,13 @@ export interface GamePokemon extends Pokemon {
   status?: string;
   statusTurns?: number;
   statStages: StatStages;
-  volatileStatus?: string[];
+  volatileStatus: string[];
+  ability?: {
+    name: string;
+    zhName?: string;
+    description?: string;
+    zhDescription?: string;
+  };
   heldItem?: Item;
   gender?: 'male' | 'female' | 'genderless';
 }
